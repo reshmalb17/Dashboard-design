@@ -1,0 +1,395 @@
+.dashboard-section {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Summary Statistics */
+.dashboard-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+/* Position 4th and 5th cards in second row, centered */
+.dashboard-stats .stat-card:nth-child(4) {
+  grid-column: 2;
+}
+
+.dashboard-stats .stat-card:nth-child(5) {
+  grid-column: 3;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  position: relative;
+  overflow: visible;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.stat-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: 600;
+  color: #333;
+  line-height: 1.2;
+  position: relative;
+  z-index: 1;
+}
+
+.stat-icons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.stat-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3B82F6;
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.stat-icon-separator {
+  color: #999;
+  font-size: 14px;
+}
+
+.generic-icon {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+/* Webflow Card */
+.webflow-card {
+  background: white;
+}
+
+.webflow-bg {
+  position: absolute;
+  right: -10px;
+  bottom: -10px;
+  font-size: 100px;
+  font-weight: 700;
+  color: #3B82F6;
+  opacity: 0.2;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Framer Card */
+.framer-card {
+  background: white;
+}
+
+.framer-bg {
+  position: absolute;
+  right: -10px;
+  bottom: -10px;
+  font-size: 100px;
+  font-weight: 700;
+  color: #3B82F6;
+  opacity: 0.2;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* License Card */
+.license-card {
+  background: white;
+}
+
+.globe-bg {
+  position: absolute;
+  right: -10px;
+  bottom: -10px;
+  width: 100px;
+  height: 100px;
+  color: #3B82F6;
+  opacity: 0.2;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Not Assigned Card */
+.not-assigned-card {
+  background: white;
+}
+
+.not-assigned-card .stat-label {
+  color: #EF4444;
+}
+
+.not-assigned-value {
+  color: #374151;
+}
+
+.stat-background-icon {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Recent Domains Section */
+.recent-domains-section {
+  background: #f9fafb;
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.recent-domains-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.recent-domains-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.search-container {
+  position: relative;
+  transition: width 0.3s ease;
+}
+
+.search-container:not(.expanded) {
+  width: 40px;
+}
+
+.search-container.expanded {
+  width: 300px;
+}
+
+.search-icon-btn {
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: background-color 0.2s;
+  padding: 0;
+}
+
+.search-icon-btn:hover {
+  background: #e5e7eb;
+}
+
+.search-input {
+  width: 100%;
+  padding: 10px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #333;
+  transition: border-color 0.2s;
+  outline: none;
+}
+
+.search-input:focus {
+  border-color: #3B82F6;
+}
+
+/* Recent Domains Table */
+.recent-domains-table-container {
+  overflow-x: auto;
+}
+
+.recent-domains-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.recent-domains-table thead {
+  background: #f9fafb;
+}
+
+.recent-domains-table th {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+  color: #666;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.recent-domains-table td {
+  padding: 12px 16px;
+  font-size: 14px;
+  color: #333;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.recent-domains-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.recent-domains-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Active Indicator */
+.active-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #e5e7eb;
+}
+
+.active-indicator.active {
+  background: #10B981;
+}
+
+/* Source Tags */
+.source-tag {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.source-tag.direct-payment {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.source-tag.license-key {
+  background: #E9D5FF;
+  color: #6B21A8;
+}
+
+/* Status Tags */
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Billing Period */
+.billing-monthly {
+  color: #3B82F6;
+  font-weight: 500;
+}
+
+/* License Key Cell */
+.license-key-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.copy-icon-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  padding: 0;
+  transition: background-color 0.2s;
+  flex-shrink: 0;
+}
+
+.copy-icon-btn:hover {
+  background: #f3f4f6;
+}
+
+/* Actions Button */
+.actions-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  padding: 0;
+  transition: background-color 0.2s;
+}
+
+.actions-btn:hover {
+  background: #f3f4f6;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .dashboard-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard-section {
+    padding: 16px;
+  }
+
+  .dashboard-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .recent-domains-table-container {
+    overflow-x: scroll;
+  }
+
+  .recent-domains-table {
+    min-width: 800px;
+  }
+
+  .search-container.expanded {
+    width: 200px;
+  }
+}
+

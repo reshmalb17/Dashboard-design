@@ -1,0 +1,138 @@
+.profile-container {
+  padding: 0;
+  width: 100%;
+}
+
+.profile-card {
+  background: white;
+  border-radius: 10px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.profile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.profile-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #262E84;
+  margin: 0;
+}
+
+.profile-delete-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: #EF4444;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background-color 0.2s;
+}
+
+.profile-delete-btn:hover:not(:disabled) {
+  background: #fef2f2;
+}
+
+.profile-delete-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.profile-content {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.profile-avatar {
+  flex-shrink: 0;
+}
+
+.profile-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.profile-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile-detail-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+  min-width: 100px;
+}
+
+.profile-detail-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+.profile-actions {
+  display: flex;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.profile-logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: 1px solid #3B82F6;
+  background: white;
+  color: #3B82F6;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.profile-logout-btn:hover {
+  background: #EFF6FF;
+  border-color: #2563EB;
+}
+
+.profile-logout-btn:active {
+  transform: translateY(1px);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .profile-content {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .profile-detail-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .profile-detail-label {
+    min-width: unset;
+  }
+}
+
