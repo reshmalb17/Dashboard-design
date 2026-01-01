@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useAddSite, useRemoveSite } from '../hooks/useDashboardQueries';
 import { useNotification } from '../hooks/useNotification';
 import './Sites.css';
@@ -118,7 +118,6 @@ function StatusDropdown({ value, onChange }) {
 }
 
 export default function Sites({ sites, userEmail }) {
-  const [domains, setDomains] = useState(mockDomains);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [filters, setFilters] = useState({
@@ -129,9 +128,141 @@ export default function Sites({ sites, userEmail }) {
     created: '',
   });
   const [contextMenu, setContextMenu] = useState(null);
+  const [visibleLicenseKeys, setVisibleLicenseKeys] = useState({});
   const contextMenuRef = useRef(null);
   const searchInputRef = useRef(null);
   const { showSuccess, showError } = useNotification();
+
+  // Convert sites object to domains array format
+  // Only show Direct payment and Site payment (exclude License Key)
+  const domains = useMemo(() => {
+    if (!sites || Object.keys(sites).length === 0) {
+      return [];
+    }
+
+    return Object.entries(sites)
+      .map(([domain, siteData]) => {
+      // Get site name from site data
+      const siteName = siteData?.name || siteData?.site_name || domain;
+      
+      // Format dates
+      let expirationDate = 'N/A';
+      if (siteData.expiration_date || siteData.renewal_date) {
+        try {
+          const timestamp = typeof (siteData.expiration_date || siteData.renewal_date) === 'number' 
+            ? (siteData.expiration_date || siteData.renewal_date)
+            : parseInt(siteData.expiration_date || siteData.renewal_date);
+          const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+          expirationDate = new Date(dateInMs).toLocaleDateString();
+        } catch (e) {
+          expirationDate = 'N/A';
+        }
+      }
+
+      let created = 'N/A';
+      if (siteData.created_at) {
+        try {
+          const timestamp = typeof siteData.created_at === 'number' 
+            ? siteData.created_at 
+            : parseInt(siteData.created_at);
+          const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+          created = new Date(dateInMs).toLocaleDateString();
+        } catch (e) {
+          created = 'N/A';
+        }
+      }
+
+      // Format billing period
+      let billingPeriod = 'N/A';
+      if (siteData.billing_period) {
+        const period = siteData.billing_period.toLowerCase().trim();
+        if (period.endsWith('ly')) {
+          billingPeriod = period.charAt(0).toUpperCase() + period.slice(1);
+        } else {
+          billingPeriod = period.charAt(0).toUpperCase() + period.slice(1) + 'ly';
+        }
+      }
+
+      // Determine status - check if expired first
+      let status = 'Active';
+      if (siteData.status) {
+        const statusLower = siteData.status.toLowerCase();
+        if (statusLower === 'expired') {
+          status = 'Expired';
+        } else if (statusLower === 'inactive') {
+          // Check if it's actually expired based on expiration date
+          if (siteData.expiration_date || siteData.renewal_date) {
+            try {
+              const timestamp = typeof (siteData.expiration_date || siteData.renewal_date) === 'number' 
+                ? (siteData.expiration_date || siteData.renewal_date)
+                : parseInt(siteData.expiration_date || siteData.renewal_date);
+              const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+              const expirationDateObj = new Date(dateInMs);
+              const now = new Date();
+              if (expirationDateObj < now) {
+                status = 'Expired';
+              } else {
+                status = siteData.status.charAt(0).toUpperCase() + siteData.status.slice(1);
+              }
+            } catch (e) {
+              status = siteData.status.charAt(0).toUpperCase() + siteData.status.slice(1);
+            }
+          } else {
+            status = siteData.status.charAt(0).toUpperCase() + siteData.status.slice(1);
+          }
+        } else {
+          status = siteData.status.charAt(0).toUpperCase() + siteData.status.slice(1);
+        }
+      } else {
+        // If no status, check expiration date
+        if (siteData.expiration_date || siteData.renewal_date) {
+          try {
+            const timestamp = typeof (siteData.expiration_date || siteData.renewal_date) === 'number' 
+              ? (siteData.expiration_date || siteData.renewal_date)
+              : parseInt(siteData.expiration_date || siteData.renewal_date);
+            const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+            const expirationDateObj = new Date(dateInMs);
+            const now = new Date();
+            if (expirationDateObj < now) {
+              status = 'Expired';
+            }
+          } catch (e) {
+            // Keep as Active if date parsing fails
+          }
+        }
+      }
+
+      return {
+        id: domain,
+        domain: domain,
+        siteName: siteName, // Add site name from response
+        source: siteData.source || 'Direct payment',
+        status: status,
+        billingPeriod: billingPeriod,
+        expirationDate: expirationDate,
+        licenseKey: siteData.license_key || 'N/A',
+        created: created,
+      };
+      })
+      .filter(domain => {
+        // Show Direct payment, Site payment, and Site purchase - exclude License Key
+        const source = domain.source || '';
+        
+        // Exclude License Key items - check multiple conditions
+        if (source === 'License Key' || 
+            source.toLowerCase().includes('license') ||
+            (domain.licenseKey && domain.licenseKey !== 'N/A' && domain.licenseKey.startsWith('KEY-'))) {
+          return false;
+        }
+        
+        // Show Direct payment, Site payment, Site purchase, or empty source
+        return source === 'Direct payment' || 
+               source === 'Site payment' || 
+               source === 'Site purchase' ||
+               source.toLowerCase().includes('site purchase') ||
+               source === '';
+      });
+  }, [sites]);
 
   // Close context menu when clicking outside
   useEffect(() => {
@@ -188,19 +319,26 @@ export default function Sites({ sites, userEmail }) {
     });
   };
 
-  const filteredDomains = domains.filter(domain => {
-    // Search filter
-    if (searchQuery && !domain.domain.toLowerCase().includes(searchQuery.toLowerCase())) {
-      return false;
-    }
-    // Other filters
-    if (filters.source && domain.source !== filters.source) return false;
-    if (filters.status && domain.status !== filters.status) return false;
-    if (filters.billingPeriod && domain.billingPeriod !== filters.billingPeriod) return false;
-    if (filters.expirationDate && domain.expirationDate !== filters.expirationDate) return false;
-    if (filters.created && domain.created !== filters.created) return false;
-    return true;
-  });
+  const filteredDomains = useMemo(() => {
+    return domains.filter(domain => {
+      // Search filter - search in both domain and site name
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesDomain = domain.domain.toLowerCase().includes(query);
+        const matchesSiteName = (domain.siteName || '').toLowerCase().includes(query);
+        if (!matchesDomain && !matchesSiteName) {
+          return false;
+        }
+      }
+      // Other filters
+      if (filters.source && domain.source !== filters.source) return false;
+      if (filters.status && domain.status !== filters.status) return false;
+      if (filters.billingPeriod && domain.billingPeriod !== filters.billingPeriod) return false;
+      if (filters.expirationDate && domain.expirationDate !== filters.expirationDate) return false;
+      if (filters.created && domain.created !== filters.created) return false;
+      return true;
+    });
+  }, [domains, searchQuery, filters]);
 
   const hasActiveFilters = Object.values(filters).some(v => v !== '');
 
@@ -264,7 +402,7 @@ export default function Sites({ sites, userEmail }) {
         >
           <option value="">Source</option>
           <option value="Direct payment">Direct payment</option>
-          <option value="License Key">License Key</option>
+          <option value="Site payment">Site payment</option>
         </select>
         
         <StatusDropdown
@@ -334,7 +472,7 @@ export default function Sites({ sites, userEmail }) {
               <tr key={domain.id}>
                 <td>
                   <div className="domain-cell-content">
-                    {domain.domain}
+                    {domain.siteName || domain.domain}
                   </div>
                 </td>
                 <td>

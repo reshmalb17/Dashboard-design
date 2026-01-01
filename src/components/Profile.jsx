@@ -9,10 +9,59 @@ export default function Profile() {
   const { showSuccess, showError } = useNotification();
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Get user name from member data or use email as fallback
-  const userName = member?.name || member?.data?.name || 'User';
-  const displayEmail = userEmail || 'Email@example.com';
-  const paymentId = member?.payment_id || member?.data?.payment_id || 'Payment ID';
+  // Extract user details from member object - check multiple possible locations
+  const getUserName = () => {
+    if (!member) return 'User';
+    return member.name || 
+           member.data?.name || 
+           member.data?.user?.name ||
+           member.data?.auth?.user?.name ||
+           member.firstName || 
+           member.data?.firstName ||
+           userEmail?.split('@')[0] || 
+           'User';
+  };
+
+  const getDisplayEmail = () => {
+    return userEmail || 
+           member?.email || 
+           member?.data?.email ||
+           member?.data?.auth?.email ||
+           'Email@example.com';
+  };
+
+  const getPaymentId = () => {
+    if (!member) return 'N/A';
+    return member.payment_id || 
+           member.data?.payment_id ||
+           member.stripe_customer_id ||
+           member.data?.stripe_customer_id ||
+           member.customer_id ||
+           member.data?.customer_id ||
+           'N/A';
+  };
+
+  const getUserDetails = () => {
+    if (!member) return {};
+    
+    // Extract all available user details
+    const memberData = member.data || member;
+    
+    return {
+      id: member.id || member._id || memberData?.id || 'N/A',
+      name: getUserName(),
+      email: getDisplayEmail(),
+      paymentId: getPaymentId(),
+      createdAt: member.created_at || memberData?.created_at || memberData?.createdAt || null,
+      plan: member.plan || memberData?.plan || memberData?.subscription?.plan || 'N/A',
+      status: member.status || memberData?.status || 'Active',
+    };
+  };
+
+  const userDetails = getUserDetails();
+  const userName = userDetails.name;
+  const displayEmail = userDetails.email;
+  const paymentId = userDetails.paymentId;
 
   const handleLogout = async () => {
     try {
@@ -81,10 +130,30 @@ export default function Profile() {
               <span className="profile-detail-label">Email Id:</span>
               <span className="profile-detail-value">{displayEmail}</span>
             </div>
-            <div className="profile-detail-row">
-              <span className="profile-detail-label">payment ID:</span>
-              <span className="profile-detail-value">{paymentId}</span>
-            </div>
+            {userDetails.plan && userDetails.plan !== 'N/A' && (
+              <div className="profile-detail-row">
+                <span className="profile-detail-label">Plan:</span>
+                <span className="profile-detail-value">{userDetails.plan}</span>
+              </div>
+            )}
+            {userDetails.createdAt && (
+              <div className="profile-detail-row">
+                <span className="profile-detail-label">Member Since:</span>
+                <span className="profile-detail-value">
+                  {(() => {
+                    try {
+                      const timestamp = typeof userDetails.createdAt === 'number' 
+                        ? userDetails.createdAt 
+                        : parseInt(userDetails.createdAt);
+                      const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+                      return new Date(dateInMs).toLocaleDateString();
+                    } catch (e) {
+                      return 'N/A';
+                    }
+                  })()}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

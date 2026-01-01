@@ -6,8 +6,14 @@
 // Dynamic import Memberstack DOM to prevent blocking page load
 import('@memberstack/dom').then(m => {
   window.__memberstackDOM = m.default || m;
+  console.log('[Memberstack] SDK module imported successfully');
 }).catch(error => {
-  console.error('[Memberstack] Failed to import SDK:', error);
+  console.error('[Memberstack] ❌ Failed to import SDK:', error);
+  console.error('[Memberstack] Error details:', {
+    message: error.message,
+    stack: error.stack,
+    name: error.name
+  });
   window.__memberstackDOM = null;
 });
 
@@ -42,7 +48,7 @@ function initMemberstack() {
           publicKey: MEMBERSTACK_PUBLIC_KEY,
           useCookies: true,                // Enable cookie persistence
           setCookieOnRootDomain: true,     // Optional: set cookies on root domain
-          sessionDurationDays: 30,         // How long sessions last
+          sessionDurationDays: 0.5,        // How long sessions last (12 hours)
         });
         console.log('[Memberstack] SDK initialized programmatically');
         console.log('[Memberstack] Initialized instance:', memberstackInstance);
@@ -90,81 +96,158 @@ function getMemberstackSDK() {
   return null;
 }
 
+// Cache for SDK promise and instance to prevent multiple initializations
+let sdkPromise = null;
+let cachedSDKInstance = null;
+
 // Wait for Memberstack SDK to be ready (optimized for fast loading)
 export async function waitForSDK() {
-  // Wait for dynamic import to complete
-  let importAttempts = 0;
-  while (!window.__memberstackDOM && importAttempts < 10) {
-    await new Promise(resolve => setTimeout(resolve, 100));
-    importAttempts++;
+  // If we already have a cached instance, return it immediately
+  if (cachedSDKInstance) {
+    console.log('[Memberstack] waitForSDK: Returning cached SDK instance');
+    return cachedSDKInstance;
   }
   
-  // Initialize SDK
-  const memberstack = initMemberstack();
+  // If there's already a pending promise, return it (prevents multiple concurrent initializations)
+  if (sdkPromise) {
+    console.log('[Memberstack] waitForSDK: SDK initialization already in progress, waiting...');
+    return sdkPromise;
+  }
   
-  if (memberstack) {
-    // If SDK has required methods, return immediately (don't wait for onReady)
-    if (memberstack.getCurrentMember || memberstack.member || memberstack.loginWithEmail) {
-      // Try to wait for onReady with a short timeout, but don't block
-      if (memberstack.onReady && typeof memberstack.onReady.then === 'function') {
-        // Race between onReady and a short timeout
-        try {
-          await Promise.race([
-            memberstack.onReady,
-            new Promise(resolve => setTimeout(resolve, 1000)) // 1 second max wait
-          ]);
-        } catch (error) {
-          console.warn('[Memberstack] onReady promise rejected:', error);
+  // Create a new promise for SDK initialization
+  sdkPromise = (async () => {
+    console.log('[Memberstack] waitForSDK: Starting initialization...');
+    
+    // Wait for dynamic import to complete
+    let importAttempts = 0;
+    const maxImportAttempts = 20; // Increased from 10
+    while (!window.__memberstackDOM && importAttempts < maxImportAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      importAttempts++;
+    }
+    
+    if (!window.__memberstackDOM) {
+      console.warn('[Memberstack] Dynamic import not completed after', maxImportAttempts, 'attempts');
+    } else {
+      console.log('[Memberstack] Dynamic import completed');
+    }
+    
+    // Initialize SDK
+    const memberstack = initMemberstack();
+    
+    if (memberstack) {
+      console.log('[Memberstack] SDK instance created, checking methods...');
+      // If SDK has required methods, return immediately (don't wait for onReady)
+      if (memberstack.getCurrentMember || memberstack.member || memberstack.loginWithEmail) {
+        console.log('[Memberstack] SDK has required methods, waiting for onReady...');
+        // Try to wait for onReady with a longer timeout
+        if (memberstack.onReady && typeof memberstack.onReady.then === 'function') {
+          // Race between onReady and a longer timeout
+          try {
+            await Promise.race([
+              memberstack.onReady,
+              new Promise(resolve => setTimeout(resolve, 3000)) // 3 second max wait
+            ]);
+            console.log('[Memberstack] SDK onReady completed');
+          } catch (error) {
+            console.warn('[Memberstack] onReady promise rejected:', error);
+          }
+        }
+        console.log('[Memberstack] SDK initialization complete, caching instance');
+        cachedSDKInstance = memberstack;
+        return memberstack;
+      } else {
+        console.warn('[Memberstack] SDK instance created but missing required methods');
+      }
+    } else {
+      console.warn('[Memberstack] SDK instance not created');
+    }
+    
+    // Fallback: Polling with more attempts
+    console.log('[Memberstack] Trying fallback polling...');
+    let pollAttempts = 0;
+    const maxAttempts = 20; // Increased from 10
+    const interval = 150; // Slightly longer interval
+    
+    while (pollAttempts < maxAttempts) {
+      const sdk = getMemberstackSDK();
+      
+      if (sdk) {
+        if (sdk.getCurrentMember || sdk.member || sdk.loginWithEmail) {
+          console.log('[Memberstack] SDK found via polling at attempt', pollAttempts + 1);
+          cachedSDKInstance = sdk;
+          return sdk;
         }
       }
-      return memberstack;
-    }
-  }
-  
-  // Fallback: Quick polling (reduced attempts)
-  let pollAttempts = 0;
-  const maxAttempts = 10; // Reduced from 20
-  const interval = 100; // Reduced from 200ms
-  
-  while (pollAttempts < maxAttempts) {
-    const sdk = getMemberstackSDK();
-    
-    if (sdk) {
-      if (sdk.getCurrentMember || sdk.member || sdk.loginWithEmail) {
-        return sdk;
-      }
+      
+      await new Promise(resolve => setTimeout(resolve, interval));
+      pollAttempts++;
     }
     
-    await new Promise(resolve => setTimeout(resolve, interval));
-    pollAttempts++;
-  }
+    console.warn('[Memberstack] Polling failed after', maxAttempts, 'attempts');
+    
+    // Final check
+    const finalSDK = getMemberstackSDK();
+    if (finalSDK) {
+      console.log('[Memberstack] SDK found in final check');
+      cachedSDKInstance = finalSDK;
+    } else {
+      console.error('[Memberstack] SDK not found in final check');
+    }
+    return finalSDK;
+  })();
   
-  // Final check
-  return getMemberstackSDK();
+  try {
+    const result = await sdkPromise;
+    return result;
+  } catch (error) {
+    // Clear promise on error so it can be retried
+    sdkPromise = null;
+    throw error;
+  }
 }
 
 // Check if user is logged in via Memberstack
 export async function checkMemberstackSession() {
   try {
+    console.log('[Memberstack] checkMemberstackSession: Starting...');
     const memberstack = await waitForSDK();
     
     if (!memberstack) {
-      console.warn('[Memberstack] SDK not loaded');
+      console.warn('[Memberstack] SDK not loaded in checkMemberstackSession');
       return null;
     }
+    
+    console.log('[Memberstack] SDK loaded, checking for onReady...');
     
     // Wait for SDK to be ready with timeout (don't wait indefinitely)
     if (memberstack.onReady && typeof memberstack.onReady.then === 'function') {
       try {
+        console.log('[Memberstack] Waiting for SDK onReady...');
         await Promise.race([
           memberstack.onReady,
-          new Promise(resolve => setTimeout(resolve, 2000)) // 2 second timeout
+          new Promise(resolve => setTimeout(resolve, 3000)) // 3 second timeout
         ]);
+        console.log('[Memberstack] SDK onReady completed');
       } catch (error) {
         console.warn('[Memberstack] onReady error:', error);
         // Continue anyway - SDK might still work
       }
+    } else {
+      // If onReady is not available, wait a bit for SDK to initialize
+      console.log('[Memberstack] onReady not available, waiting 800ms for SDK initialization...');
+      await new Promise(resolve => setTimeout(resolve, 800));
     }
+    
+    console.log('[Memberstack] Attempting to get current member...');
+    
+    // Check for session cookies first (for debugging)
+    const cookies = document.cookie;
+    const hasMemberstackCookie = cookies.includes('_ms-mem') || cookies.includes('_ms-token');
+    console.log('[Memberstack] Cookie check:', {
+      hasCookies: hasMemberstackCookie,
+      cookieString: cookies.substring(0, 200) // First 200 chars
+    });
     
     // Get current member - try multiple methods
     let member = null;
@@ -172,6 +255,7 @@ export async function checkMemberstackSession() {
     // Method 1: memberstack.getCurrentMember (npm package method)
     if (memberstack.getCurrentMember && typeof memberstack.getCurrentMember === 'function') {
       try {
+        console.log('[Memberstack] Trying getCurrentMember()...');
         const memberResult = await memberstack.getCurrentMember();
         console.log('[Memberstack] getCurrentMember result:', {
           hasData: !!memberResult,
@@ -182,7 +266,10 @@ export async function checkMemberstackSession() {
         member = memberResult;
       } catch (error) {
         console.warn('[Memberstack] Error with getCurrentMember:', error);
+        console.warn('[Memberstack] Error details:', error.message, error.stack);
       }
+    } else {
+      console.warn('[Memberstack] getCurrentMember method not available');
     }
     
     // Method 2: memberstack.member (alternative npm package method)
@@ -242,16 +329,52 @@ export async function checkMemberstackSession() {
 export function getUserEmail(member) {
   if (!member) return null;
   
+  // Log member structure for debugging email extraction
+  console.log('[Memberstack] getUserEmail: Checking member structure:', {
+    hasData: !!member.data,
+    hasAuth: !!member.data?.auth,
+    keys: Object.keys(member),
+    dataKeys: member.data ? Object.keys(member.data) : [],
+    authKeys: member.data?.auth ? Object.keys(member.data.auth) : []
+  });
+  
   // Try multiple possible email fields (matching reference dashboard)
+  // Check in order of most likely locations
   const email = member.data?.auth?.email || 
+                member.data?.auth?.user?.email ||
                 member.data?.email || 
+                member.data?.user?.email ||
                 member.email || 
-                member._email || 
+                member._email ||
+                member.user?.email ||
+                member.auth?.email ||
+                member.auth?.user?.email ||
                 null;
   
   // Normalize email (lowercase and trim) - matching reference dashboard
   if (email) {
-    return email.toLowerCase().trim();
+    const normalized = email.toLowerCase().trim();
+    console.log('[Memberstack] getUserEmail: Found email:', normalized);
+    return normalized;
+  }
+  
+  // If no email found, log all possible email-like fields for debugging
+  console.warn('[Memberstack] getUserEmail: No email found. Checking all string fields...');
+  const allStringFields = {};
+  const checkFields = (obj, prefix = '') => {
+    if (!obj || typeof obj !== 'object') return;
+    for (const [key, value] of Object.entries(obj)) {
+      const fullKey = prefix ? `${prefix}.${key}` : key;
+      if (typeof value === 'string' && value.includes('@')) {
+        allStringFields[fullKey] = value;
+      } else if (typeof value === 'object' && value !== null) {
+        checkFields(value, fullKey);
+      }
+    }
+  };
+  checkFields(member);
+  if (Object.keys(allStringFields).length > 0) {
+    console.log('[Memberstack] getUserEmail: Found email-like fields:', allStringFields);
   }
   
   return null;
@@ -859,8 +982,8 @@ export async function getAPISessionToken(userEmail) {
     if (response.ok) {
       const data = await response.json();
       if (data.token) {
-        // Set cookie for future requests
-        document.cookie = `sb_session=${data.token}; path=/; max-age=86400; SameSite=Lax`;
+        // Set cookie for future requests (12 hours = 43200 seconds)
+        document.cookie = `sb_session=${data.token}; path=/; max-age=43200; SameSite=Lax`;
         return data.token;
       }
     }

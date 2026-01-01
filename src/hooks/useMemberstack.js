@@ -12,37 +12,62 @@ export function useMemberstack() {
 
   useEffect(() => {
     let mounted = true;
+    let isChecking = false; // Guard to prevent concurrent checks
 
-    async function checkSession() {
+    async function checkSession(skipLoadingState = false) {
+      // Prevent concurrent session checks
+      if (isChecking) {
+        console.log('[useMemberstack] Session check already in progress, skipping...');
+        return;
+      }
+      
       try {
-        setLoading(true);
+        isChecking = true;
+        // Only set loading state if explicitly requested (prevents flickering on login page)
+        if (!skipLoadingState) {
+          setLoading(true);
+        }
         setError(null);
 
         // Memberstack SDK is now initialized programmatically via @memberstack/dom
         // No need to check for script tag
 
-        // Wait for SDK with shorter timeout (optimized for fast loading)
+        // Wait for SDK with longer timeout to ensure it loads properly
         const memberstack = await Promise.race([
           waitForSDK(),
-          new Promise((resolve) => setTimeout(() => resolve(null), 2000)) // 2 second timeout - show UI faster
+          new Promise((resolve) => setTimeout(() => resolve(null), 5000)) // 5 second timeout
         ]);
 
         if (!memberstack) {
           // SDK not loaded yet after timeout - show login prompt anyway
-          console.warn('[Memberstack] SDK not loaded after timeout, showing login prompt');
+          console.warn('[Memberstack] SDK not loaded after 5 second timeout, showing login prompt');
+          console.warn('[Memberstack] Check browser console for SDK loading errors');
           if (mounted) {
             setMember(null);
             setLoading(false);
+            setError('SDK failed to load. Please refresh the page.');
             // Will retry when memberstack:ready event fires
           }
+          isChecking = false;
           return;
         }
+        
+        console.log('[useMemberstack] SDK loaded successfully, checking session...');
 
         // Check session
         const currentMember = await checkMemberstackSession();
         
         if (mounted) {
-          setMember(currentMember);
+          // Only update state if member actually changed to prevent unnecessary re-renders
+          setMember(prevMember => {
+            // Compare by ID to avoid unnecessary updates
+            const prevId = prevMember?.id || prevMember?._id;
+            const newId = currentMember?.id || currentMember?._id;
+            if (prevId === newId && prevMember && currentMember) {
+              return prevMember; // No change, return previous to prevent re-render
+            }
+            return currentMember;
+          });
           setLoading(false);
         }
       } catch (err) {
@@ -52,6 +77,8 @@ export function useMemberstack() {
           setMember(null);
           setLoading(false);
         }
+      } finally {
+        isChecking = false;
       }
     }
 
@@ -59,14 +86,24 @@ export function useMemberstack() {
 
     // Set up authentication state listener (from Memberstack docs)
     let authUnsubscribe = null;
+    let lastAuthCheck = 0;
+    const AUTH_CHECK_THROTTLE = 1000; // Only check once per second
+    
     async function setupAuthListener() {
       try {
         const memberstack = await waitForSDK();
         if (memberstack && memberstack.onAuthChange && typeof memberstack.onAuthChange === 'function') {
           authUnsubscribe = memberstack.onAuthChange((authData) => {
             if (mounted) {
-              console.log('[Memberstack] Auth state changed:', authData);
-              checkSession();
+              const now = Date.now();
+              // Throttle auth change checks to prevent excessive calls
+              if (now - lastAuthCheck > AUTH_CHECK_THROTTLE) {
+                lastAuthCheck = now;
+                console.log('[Memberstack] Auth state changed:', authData);
+                checkSession();
+              } else {
+                console.log('[Memberstack] Auth change throttled, skipping...');
+              }
             }
           });
         }
@@ -77,49 +114,99 @@ export function useMemberstack() {
     setupAuthListener();
 
     // Session management: Check and refresh session periodically
+    // Only run if we have a member (don't check on login page)
     const sessionCheckInterval = setInterval(async () => {
-      if (mounted) {
-        const expired = await isSessionExpired();
-        if (expired && member) {
-          console.log('[Memberstack] Session expired, refreshing...');
-          await refreshSession();
-          checkSession();
+      if (mounted && member) {
+        try {
+          const expired = await isSessionExpired();
+          if (expired) {
+            console.log('[Memberstack] Session expired, refreshing...');
+            await refreshSession();
+            checkSession(true); // Skip loading state
+          }
+        } catch (err) {
+          console.warn('[Memberstack] Session check error:', err);
         }
       }
     }, 5 * 60 * 1000); // Check every 5 minutes
 
     // Session refresh on visibility change (when user returns to tab)
+    // Add debounce to prevent excessive calls
+    let visibilityTimeout = null;
+    let lastVisibilityCheck = 0;
+    const VISIBILITY_CHECK_THROTTLE = 5000; // Only check every 5 seconds
+    
     const handleVisibilityChange = () => {
       if (!document.hidden && mounted) {
-        refreshSession().then(() => {
-          if (mounted) {
-            checkSession();
+        const now = Date.now();
+        // Throttle visibility checks to prevent excessive calls
+        if (now - lastVisibilityCheck < VISIBILITY_CHECK_THROTTLE) {
+          console.log('[useMemberstack] Visibility change throttled, skipping...');
+          return;
+        }
+        lastVisibilityCheck = now;
+        
+        // Clear any pending timeout
+        if (visibilityTimeout) {
+          clearTimeout(visibilityTimeout);
+        }
+        // Debounce: only check after 1 second of being visible
+        visibilityTimeout = setTimeout(() => {
+          if (mounted && !document.hidden) {
+            // Only refresh if we have a member (don't check on login page)
+            if (member) {
+              refreshSession().then(() => {
+                if (mounted) {
+                  checkSession(true); // Skip loading state
+                }
+              }).catch(err => {
+                console.warn('[useMemberstack] Visibility change refresh failed:', err);
+              });
+            }
           }
-        });
+        }, 1000);
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     // Listen for Memberstack events
+    let readyEventThrottle = 0;
     const handleMemberstackReady = () => {
-      checkSession();
+      const now = Date.now();
+      // Throttle ready event to prevent excessive checks
+      if (now - readyEventThrottle > 2000) {
+        readyEventThrottle = now;
+        console.log('[useMemberstack] Memberstack ready event received');
+        checkSession();
+      }
     };
 
     window.addEventListener('memberstack:ready', handleMemberstackReady);
     
     // Handle login event - immediately check session and update state
+    let loginEventHandled = false;
+    let loginEventTimeout = null;
     const handleLogin = async () => {
-      if (mounted) {
+      if (mounted && !loginEventHandled) {
+        loginEventHandled = true;
         console.log('[useMemberstack] Login event received, checking session immediately');
+        
+        // Clear any pending timeout
+        if (loginEventTimeout) {
+          clearTimeout(loginEventTimeout);
+        }
+        
         // Wait a bit for session to be established, then check
-        setTimeout(async () => {
+        // Use skipLoadingState to prevent flickering
+        loginEventTimeout = setTimeout(async () => {
           if (mounted) {
-            console.log('[useMemberstack] Re-checking session after login event');
-            await checkSession();
+            await checkSession(true); // Skip loading state to prevent flicker
           }
-        }, 100);
-        // Also check immediately
-        await checkSession();
+          // Reset flag after check completes
+          loginEventHandled = false;
+        }, 500);
+      } else {
+        console.log('[useMemberstack] Login event already being handled, ignoring duplicate');
       }
     };
     window.addEventListener('memberstack:login', handleLogin);
@@ -141,6 +228,12 @@ export function useMemberstack() {
         authUnsubscribe.unsubscribe();
       }
       clearInterval(sessionCheckInterval);
+      if (visibilityTimeout) {
+        clearTimeout(visibilityTimeout);
+      }
+      if (loginEventTimeout) {
+        clearTimeout(loginEventTimeout);
+      }
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('memberstack:ready', handleMemberstackReady);
       window.removeEventListener('memberstack:login', handleLogin);

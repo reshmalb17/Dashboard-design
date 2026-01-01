@@ -29,6 +29,11 @@ function DashboardContent() {
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
   const [addDomainModalOpen, setAddDomainModalOpen] = useState(false);
 
+  // Enable queries only when user is authenticated and has email
+  // This ensures data is fetched immediately after login
+  // Must be declared before useEffects that use it
+  const queriesEnabled = isAuthenticated && !!userEmail;
+
   // Debug: Log authentication state
   useEffect(() => {
     console.log('[App] Authentication state:', {
@@ -38,9 +43,23 @@ function DashboardContent() {
       authLoading,
       authError: authError?.message,
       memberKeys: member ? Object.keys(member) : [],
-      memberEmail: member?.email || member?._email || member?.data?.email || 'NOT FOUND'
+      memberEmail: member?.email || member?._email || member?.data?.email || member?.data?.auth?.email || 'NOT FOUND'
     });
-  }, [member, userEmail, isAuthenticated, authLoading, authError]);
+    
+    // If we have email but queries are not enabled, log warning
+    if (userEmail && !queriesEnabled) {
+      console.warn('[App] ⚠️ User email available but queries not enabled:', {
+        userEmail,
+        isAuthenticated,
+        queriesEnabled
+      });
+    }
+    
+    // If authenticated with email, ensure queries are enabled
+    if (isAuthenticated && userEmail && !queriesEnabled) {
+      console.log('[App] ✅ User authenticated with email, queries should be enabled');
+    }
+  }, [member, userEmail, isAuthenticated, authLoading, authError, queriesEnabled]);
 
   // Set maximum timeout to prevent infinite loading
   useEffect(() => {
@@ -51,15 +70,12 @@ function DashboardContent() {
     }
 
     const timeout = setTimeout(() => {
+      console.warn('[App] Auth loading timeout reached after 5 seconds');
       setMaxTimeoutReached(true);
-    }, 3000); // 3 seconds max - show login prompt faster
+    }, 5000); // 5 seconds max - give SDK more time to load
 
     return () => clearTimeout(timeout);
   }, [authLoading]);
-
-  // Debug: Log query enablement
-  // TEMPORARY: Enable queries for design (using mock data)
-  const queriesEnabled = true; // Always enabled for mock data design
   useEffect(() => {
     console.log('[App] Query enablement:', {
       isAuthenticated,
@@ -71,6 +87,8 @@ function DashboardContent() {
   }, [isAuthenticated, userEmail, queriesEnabled]);
 
   // Use TanStack Query hooks - both queries run in parallel automatically
+  // The userEmail comes from Memberstack login and is used to fetch data from the server
+  // This ensures we display content from the server using the authenticated user's email
   const {
     data: dashboardData,
     isLoading: loadingDashboard,
@@ -78,7 +96,7 @@ function DashboardContent() {
     isFetching: isFetchingDashboard,
     status: dashboardStatus,
   } = useDashboardData(userEmail, {
-    enabled: queriesEnabled,
+    enabled: queriesEnabled, // Only fetch when authenticated and email is available
   });
 
   const {
@@ -88,7 +106,7 @@ function DashboardContent() {
     isFetching: isFetchingLicenses,
     status: licensesStatus,
   } = useLicenses(userEmail, {
-    enabled: queriesEnabled,
+    enabled: queriesEnabled, // Only fetch when authenticated and email is available
   });
   
   // Debug: Log query status
@@ -104,13 +122,44 @@ function DashboardContent() {
       isFetchingLicenses,
       hasLicensesData: !!licensesData,
       licensesError: licensesError?.message,
+      userEmail, // Log email being used
+      queriesEnabled, // Log if queries are enabled
     });
-  }, [dashboardStatus, loadingDashboard, isFetchingDashboard, dashboardData, dashboardError, licensesStatus, loadingLicenses, isFetchingLicenses, licensesData, licensesError]);
+    
+    // Log when data is successfully loaded
+    if (dashboardData && licensesData && userEmail) {
+      console.log('[App] ✅ Data loaded successfully:', {
+        userEmail,
+        sitesCount: dashboardData.sites ? Object.keys(dashboardData.sites).length : 0,
+        subscriptionsCount: dashboardData.subscriptions ? Object.keys(dashboardData.subscriptions).length : 0,
+        licensesCount: licensesData.licenses ? licensesData.licenses.length : 0
+      });
+    }
+  }, [dashboardStatus, loadingDashboard, isFetchingDashboard, dashboardData, dashboardError, licensesStatus, loadingLicenses, isFetchingLicenses, licensesData, licensesError, userEmail, queriesEnabled]);
 
   const loading = loadingDashboard || loadingLicenses;
-  const sites = dashboardData?.sites || {};
-  const licenses = licensesData?.licenses || [];
-  const subscriptions = dashboardData?.subscriptions || [];
+  // Use data from queries - these will persist in cache even after refresh
+  // TanStack Query automatically handles caching and persistence
+  // Important: Use nullish coalescing to preserve data structure
+  const sites = dashboardData?.sites ?? {};
+  const licenses = licensesData?.licenses ?? [];
+  // Subscriptions can be object or array - preserve the structure from API
+  const subscriptions = dashboardData?.subscriptions ?? (Array.isArray(dashboardData?.subscriptions) ? [] : {});
+  
+  // Debug: Log data persistence
+  useEffect(() => {
+    if (dashboardData || licensesData) {
+      console.log('[App] Data in state:', {
+        hasDashboardData: !!dashboardData,
+        hasLicensesData: !!licensesData,
+        sitesCount: Object.keys(sites).length,
+        licensesCount: licenses.length,
+        subscriptionsCount: Object.keys(subscriptions).length,
+        dashboardDataKeys: dashboardData ? Object.keys(dashboardData) : [],
+        licensesDataKeys: licensesData ? Object.keys(licensesData) : []
+      });
+    }
+  }, [dashboardData, licensesData, sites, licenses, subscriptions]);
 
   // Debug: Log data fetching status (MUST be before any early returns)
   useEffect(() => {
@@ -146,8 +195,9 @@ function DashboardContent() {
     showError(error.message || 'An error occurred');
   }
 
-  // Show loading state only briefly (optimized for fast loading)
-  if (authLoading && !maxTimeoutReached) {
+  // Show loading state only if we're not authenticated yet and haven't timed out
+  // If authenticated OR we have data already, proceed to dashboard (data might already be loaded from prefetch)
+  if (authLoading && !isAuthenticated && !userEmail && !maxTimeoutReached) {
     return (
       <div className="login-container">
         <div className="card">
@@ -157,8 +207,9 @@ function DashboardContent() {
     );
   }
 
-  // If timeout reached or not authenticated, show login prompt immediately
-  if (maxTimeoutReached || !isAuthenticated) {
+  // If timeout reached or not authenticated (and no data), show login prompt
+  // Only show login if we're definitely not authenticated and not loading
+  if (maxTimeoutReached || (!isAuthenticated && !userEmail && !authLoading && !loadingDashboard && !loadingLicenses)) {
     return (
       <div className="login-container">
         {authError && (
@@ -170,6 +221,7 @@ function DashboardContent() {
       </div>
     );
   }
+
 
   // Show dashboard with sidebar layout
   return (
@@ -268,7 +320,11 @@ function DashboardContent() {
           ) : (
             <>
               {activeSection === 'dashboard' && (
-                <Dashboard />
+                <Dashboard 
+                  sites={sites}
+                  subscriptions={subscriptions}
+                  licenses={licenses}
+                />
               )}
               {activeSection === 'domains' && (
                 <Sites sites={sites} userEmail={userEmail} />

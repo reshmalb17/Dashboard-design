@@ -6,8 +6,10 @@
 // Using existing server - same as consentbit-dashboard-1
 const API_BASE = import.meta.env.VITE_API_BASE || 'https://consentbit-dashboard-test.web-8fb.workers.dev';
 
-// Request timeout (5 seconds)
-const REQUEST_TIMEOUT = 5000;
+// Request timeout (30 seconds for dashboard, 10 seconds for others)
+// Dashboard API can take longer due to data processing
+const REQUEST_TIMEOUT = 30000; // 30 seconds
+const REQUEST_TIMEOUT_SHORT = 10000; // 10 seconds for faster endpoints
 
 // Helper to create timeout promise
 function createTimeoutPromise(timeout) {
@@ -82,6 +84,13 @@ export async function getDashboard(userEmail) {
         }),
         createTimeoutPromise(REQUEST_TIMEOUT)
       ]);
+      
+      // Log response immediately for debugging
+      console.log('[API] Dashboard API response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
       
       console.log('[API] Dashboard response status:', {
         status: response.status,

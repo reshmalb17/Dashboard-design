@@ -2,8 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDashboard, getLicenses, addSite, removeSite } from '../services/api';
 import { mockDashboardData, mockLicensesData, mockApiDelay } from '../data/mockData';
 
-// TEMPORARY: Use mock data instead of API calls for design
-const USE_MOCK_DATA = true;
+// Use real API data
+const USE_MOCK_DATA = false;
 
 // Query keys
 export const queryKeys = {
@@ -23,11 +23,21 @@ export function useDashboardData(userEmail, options = {}) {
         console.log('[Mock] Returning mock dashboard data');
         return mockDashboardData;
       }
-      return getDashboard(userEmail);
+      console.log('[useDashboardData] Fetching real dashboard data for:', userEmail);
+      const data = await getDashboard(userEmail);
+      console.log('[useDashboardData] ✅ Dashboard data received:', {
+        hasSites: !!data.sites,
+        sitesCount: data.sites ? Object.keys(data.sites).length : 0,
+        hasSubscriptions: !!data.subscriptions
+      });
+      return data;
     },
     enabled: (USE_MOCK_DATA || !!userEmail) && !options.disabled,
-    staleTime: 300000, // 5 minutes (matches queryClient default)
-    retry: 1, // Fast failure
+    staleTime: 300000, // 5 minutes - data is considered fresh for 5 minutes
+    gcTime: 600000, // Keep in cache for 10 minutes even when not in use
+    retry: 2, // Retry on failure
+    refetchOnMount: false, // Don't refetch on mount if data is fresh (use cached data)
+    refetchOnWindowFocus: false, // Don't refetch on window focus
     ...options,
   });
 }
@@ -44,11 +54,20 @@ export function useLicenses(userEmail, options = {}) {
         console.log('[Mock] Returning mock licenses data');
         return mockLicensesData;
       }
-      return getLicenses(userEmail);
+      console.log('[useLicenses] Fetching real licenses data for:', userEmail);
+      const data = await getLicenses(userEmail);
+      console.log('[useLicenses] ✅ Licenses data received:', {
+        hasLicenses: !!data.licenses,
+        licensesCount: data.licenses ? data.licenses.length : 0
+      });
+      return data;
     },
     enabled: (USE_MOCK_DATA || !!userEmail) && !options.disabled,
-    staleTime: 300000, // 5 minutes (matches queryClient default)
-    retry: 1, // Fast failure
+    staleTime: 300000, // 5 minutes - data is considered fresh for 5 minutes
+    gcTime: 600000, // Keep in cache for 10 minutes even when not in use
+    retry: 2, // Retry on failure
+    refetchOnMount: false, // Don't refetch on mount if data is fresh (use cached data)
+    refetchOnWindowFocus: false, // Don't refetch on window focus
     ...options,
   });
 }

@@ -71,6 +71,14 @@ export default function LoginPrompt() {
 
   const handleCodeSubmit = async (e) => {
     e.preventDefault();
+    e.stopPropagation();
+    
+    // Prevent multiple submissions
+    if (isLoading) {
+      console.log('[LoginPrompt] Code submission already in progress, ignoring...');
+      return;
+    }
+    
     setError('');
     
     if (!code || code.length !== 6) {
@@ -80,30 +88,30 @@ export default function LoginPrompt() {
 
     setIsLoading(true);
     try {
+      // Step 1: Verify login code with Memberstack
       const result = await verifyLoginCode(email, code);
       if (result.success) {
-        setMessage('Code verified! Loading your dashboard...');
+        setMessage('Code verified! Checking login status...');
         
-        // Refresh session after successful login
+        // Step 2: Refresh session and verify Memberstack login status
         try {
           await refreshSession();
           console.log('[LoginPrompt] Session refreshed after passwordless login');
         } catch (refreshError) {
           console.warn('[LoginPrompt] Session refresh failed:', refreshError);
-          // Continue anyway - session might still be valid
         }
         
-        // Get user email immediately after login
-        // Wait a bit for session to be established (Memberstack needs time to set cookies)
+        // Step 3: Check Memberstack login status - verify user is actually logged in
         let userEmail = null;
         let member = null;
+        let loginVerified = false;
         
         // Try multiple times with delays (session might not be immediately available)
-        for (let attempt = 0; attempt < 3; attempt++) {
+        for (let attempt = 0; attempt < 5; attempt++) {
           try {
             if (attempt > 0) {
-              // Wait before retrying (100ms, 300ms, 500ms)
-              await new Promise(resolve => setTimeout(resolve, attempt * 200));
+              // Wait before retrying (100ms, 200ms, 300ms, 400ms)
+              await new Promise(resolve => setTimeout(resolve, attempt * 100));
             }
             
             member = await checkMemberstackSession();
@@ -111,6 +119,7 @@ export default function LoginPrompt() {
               userEmail = getUserEmail(member);
               console.log(`[LoginPrompt] Attempt ${attempt + 1}: Member found, email:`, userEmail);
               if (userEmail) {
+                loginVerified = true;
                 break; // Success - exit retry loop
               }
             }
@@ -119,57 +128,82 @@ export default function LoginPrompt() {
           }
         }
         
-        // Fallback to form email if we still don't have it
-        if (!userEmail) {
-          console.warn('[LoginPrompt] Could not get member email, using form email as fallback');
+        // Step 4: If Memberstack login verified, use the email from Memberstack
+        // Otherwise fallback to form email
+        if (!loginVerified || !userEmail) {
+          console.warn('[LoginPrompt] Memberstack login not verified, using form email as fallback');
           userEmail = email.toLowerCase().trim();
         }
         
-        console.log('[LoginPrompt] Final userEmail for prefetch:', userEmail);
+        console.log('[LoginPrompt] Login verified, userEmail:', userEmail);
         
-        // Prefetch dashboard data immediately (before showing dashboard)
+        // Step 5: If login is successful, use the email from Memberstack to fetch data from server
+        // This ensures we display content from the server using the authenticated user's email
         if (userEmail) {
-          console.log('[LoginPrompt] Prefetching dashboard data for:', userEmail);
-          setMessage('Loading your data...');
+          setMessage('Loading your dashboard...');
           
           try {
-            // Prefetch both dashboard and licenses data in parallel
-            await Promise.all([
+            // Fetch both dashboard and licenses data in parallel immediately using the email from Memberstack
+            // The email is used to query the backend API which returns user-specific data
+            console.log('[LoginPrompt] Fetching dashboard data from server using email:', userEmail);
+            
+            const [dashboardData, licensesData] = await Promise.all([
               queryClient.prefetchQuery({
                 queryKey: queryKeys.dashboard(userEmail),
-                queryFn: () => getDashboard(userEmail),
+                queryFn: async () => {
+                  console.log('[LoginPrompt] Fetching dashboard from API...');
+                  const data = await getDashboard(userEmail);
+                  console.log('[LoginPrompt] ✅ Dashboard data received:', {
+                    hasSites: !!data.sites,
+                    sitesCount: data.sites ? Object.keys(data.sites).length : 0,
+                    hasSubscriptions: !!data.subscriptions
+                  });
+                  return data;
+                },
                 staleTime: 300000, // 5 minutes
+                retry: 2,
               }),
               queryClient.prefetchQuery({
                 queryKey: queryKeys.licenses(userEmail),
-                queryFn: () => getLicenses(userEmail),
+                queryFn: async () => {
+                  console.log('[LoginPrompt] Fetching licenses from API...');
+                  const data = await getLicenses(userEmail);
+                  console.log('[LoginPrompt] ✅ Licenses data received:', {
+                    hasLicenses: !!data.licenses,
+                    licensesCount: data.licenses ? data.licenses.length : 0
+                  });
+                  return data;
+                },
                 staleTime: 300000, // 5 minutes
+                retry: 2,
               })
             ]);
             
-            console.log('[LoginPrompt] ✅ Dashboard data prefetched successfully');
-            setMessage('Dashboard ready! Redirecting...');
+            // Step 6: Verify data was fetched and cached
+            const cachedDashboard = queryClient.getQueryData(queryKeys.dashboard(userEmail));
+            const cachedLicenses = queryClient.getQueryData(queryKeys.licenses(userEmail));
             
-            // Dispatch login event to trigger UI update (instead of page reload)
-            window.dispatchEvent(new CustomEvent('memberstack:login'));
-            
-            // Small delay to show success message, then let React update naturally
-            setTimeout(() => {
-              // The auth state change will trigger dashboard to show
-              // No need to reload page - React will re-render with new auth state
-            }, 500);
-          } catch (prefetchError) {
-            console.error('[LoginPrompt] Error prefetching data:', prefetchError);
-            // Continue anyway - data will load when dashboard shows
-            setMessage('Login successful! Loading dashboard...');
-            window.dispatchEvent(new CustomEvent('memberstack:login'));
+            if (cachedDashboard && cachedLicenses) {
+              console.log('[LoginPrompt] ✅ All data loaded and cached, showing dashboard');
+              setIsLoading(false);
+              
+              // Step 7: Dispatch login event to show dashboard (data is already loaded)
+              window.dispatchEvent(new CustomEvent('memberstack:login'));
+            } else {
+              throw new Error('Data was not properly cached after fetch');
+            }
+          } catch (fetchError) {
+            console.error('[LoginPrompt] ❌ Error fetching data:', fetchError);
+            setError(fetchError.message || 'Failed to load dashboard data. Please try again.');
+            setIsLoading(false);
+            return; // Don't show dashboard if data fetch failed
           }
         } else {
-          // Fallback: reload page if we can't get email
-          console.warn('[LoginPrompt] No user email, reloading page');
-          setTimeout(() => {
-            window.location.reload();
-          }, 1000);
+          // Fallback: show error instead of reloading (reload causes refresh loop)
+          console.warn('[LoginPrompt] No user email after login verification');
+          setError('Unable to retrieve user email. Please try logging in again.');
+          setIsLoading(false);
+          // Don't reload - just show error and let user retry
         }
       } else {
         setError(result.error || 'Invalid code. Please try again.');
@@ -259,7 +293,44 @@ export default function LoginPrompt() {
                 id="code-input"
                 placeholder=" "
                 value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onChange={(e) => {
+                  const newCode = e.target.value.replace(/\D/g, '').slice(0, 6);
+                  setCode(newCode);
+                }}
+                onPaste={(e) => {
+                  // Handle paste - extract numeric code
+                  const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+                  const numericCode = pastedText.replace(/\D/g, '').slice(0, 6);
+                  setCode(numericCode);
+                  // Prevent default to avoid double handling
+                  e.preventDefault();
+                  
+                  // Auto-submit after paste if we have 6 digits (but only once)
+                  if (numericCode.length === 6 && !isLoading) {
+                    // Use a ref or flag to prevent multiple submissions
+                    setTimeout(() => {
+                      if (!isLoading && numericCode.length === 6) {
+                        const form = e.target.closest('form');
+                        if (form) {
+                          // Create a proper submit event
+                          const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+                          form.dispatchEvent(submitEvent);
+                        }
+                      }
+                    }, 200);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  // Auto-submit on Enter key
+                  if (e.key === 'Enter' && code.length === 6 && !isLoading) {
+                    e.preventDefault();
+                    const form = e.target.closest('form');
+                    if (form) {
+                      const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+                      form.dispatchEvent(submitEvent);
+                    }
+                  }
+                }}
                 className={`login-input code-input ${code ? 'has-value' : ''}`}
                 disabled={isLoading}
                 maxLength={6}
