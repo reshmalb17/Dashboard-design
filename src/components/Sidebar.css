@@ -1,43 +1,47 @@
 .sidebar {
-  width: 250px;
-  max-width: 250px;
-  background: white;
+  width: 300px;
+    max-width: 294px;
+
   color: #333;
   height: 100%;
   max-height: 100%;
   position: fixed;
   left: 0;
-  top: 80px;
+  top: 120px;
   display: flex;
   flex-direction: column;
-  border-right: 2px solid #3B82F6;
+ 
   z-index: 90;
   overflow-y: auto;
   overflow-x: hidden;
   flex-shrink: 0;
-  padding: 20px;
+  padding: 22px;
+  padding-top: 0px;
 }
 
 .sidebar-nav {
   flex: 1;
-  padding: 0;
+  padding: 11px 10px 0px 12px;
   overflow-y: auto;
+  border-radius: 10px;
+  background-color: #FFF;
 }
 
 .sidebar-item {
   width: 100%;
-  padding: 14px 20px;
+  padding: 19px 12px 19px 21px;
+  margin-top: 6px;
   background: none;
   border: none;
   border-radius: 10px;
-  color: #333;
+  color: #0A091F;
   text-align: left;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 15px;
-  font-weight: 500;
+  font-size: 17px;
+  font-weight: 400;
   transition: all 0.2s;
   position: relative;
 }
@@ -49,7 +53,7 @@
 
 .sidebar-item.active {
   background: linear-gradient(90deg, #FFFFFF 0%, #0061FF 100%);
-  color: #262E84;
+  color: #0A091F;
   font-weight: 600;
   border-radius: 10px;
 }

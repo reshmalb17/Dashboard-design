@@ -3,6 +3,7 @@ import { useMemberstack } from '../hooks/useMemberstack';
 import { logout } from '../services/memberstack';
 import { useNotification } from '../hooks/useNotification';
 import './Profile.css';
+import profileImg from '../assets/profileImg.png'
 
 export default function Profile() {
   const { userEmail, member } = useMemberstack();
@@ -47,7 +48,7 @@ export default function Profile() {
   return (
     <div className="profile-container">
       <div className="profile-card">
-        <div className="profile-header">
+        {/* <div className="profile-header">
           <h1 className="profile-title">Profile</h1>
           <button
             className="profile-delete-btn"
@@ -61,15 +62,11 @@ export default function Profile() {
             </svg>
             <span>Delete Account</span>
           </button>
-        </div>
+        </div> */}
 
         <div className="profile-content">
           <div className="profile-avatar">
-            <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="40" cy="40" r="40" fill="#E5E7EB"/>
-              <circle cx="40" cy="32" r="12" fill="#9CA3AF"/>
-              <path d="M20 60C20 50 28 42 40 42C52 42 60 50 60 60" fill="#9CA3AF"/>
-            </svg>
+        <img src={profileImg} alt="Profile" />
           </div>
 
           <div className="profile-details">
@@ -93,11 +90,12 @@ export default function Profile() {
             className="profile-logout-btn"
             onClick={handleLogout}
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M6 14H3C2.44772 14 2 13.5523 2 13V3C2 2.44772 2.44772 2 3 2H6" stroke="#3B82F6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M10 11L13 8L10 5" stroke="#3B82F6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M13 8H6" stroke="#3B82F6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M8.90002 7.56023C9.21002 3.96023 11.06 2.49023 15.11 2.49023H15.24C19.71 2.49023 21.5 4.28023 21.5 8.75023V15.2702C21.5 19.7402 19.71 21.5302 15.24 21.5302H15.11C11.09 21.5302 9.24002 20.0802 8.91002 16.5402" stroke="#262E84" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M15 12H3.62" stroke="#262E84" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M5.85 8.6499L2.5 11.9999L5.85 15.3499" stroke="#262E84" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+
             <span>Logout</span>
           </button>
         </div>

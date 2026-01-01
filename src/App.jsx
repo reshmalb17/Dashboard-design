@@ -195,7 +195,7 @@ function DashboardContent() {
                 onClick={() => setPurchaseModalOpen(true)}
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M8 3V13M3 8H13" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round"/>
+                  <path d="M8 3V13M3 8H13" stroke="#262E84" strokeWidth="2" strokeLinecap="round"/>
                 </svg>
                 <span>Purchase License Key</span>
               </button>

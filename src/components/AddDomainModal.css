@@ -6,7 +6,8 @@
   bottom: 0;
   background: rgba(0, 0, 0, 0.5);
   z-index: 1000;
-  backdrop-filter: blur(2px);
+ backdrop-filter: blur(15px);
+  background: #0A091F38;
 }
 
 .add-domain-modal {
@@ -19,7 +20,7 @@
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   z-index: 1001;
   width: 90%;
-  max-width: 700px;
+  max-width: 1182px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -29,15 +30,15 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 24px;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 24px 11px 22px 38px;
+  border-bottom: 1px solid #00000020;
 }
 
 .add-domain-modal-title {
   margin: 0;
   font-size: 20px;
-  font-weight: 600;
-  color: #333;
+  font-weight: 500;
+ 
 }
 
 .add-domain-modal-close {
@@ -60,7 +61,7 @@
 
 .add-domain-modal-body {
   padding: 0;
-  display: grid;
+  display: flex;
   grid-template-columns: 1fr auto 1fr;
   gap: 0;
   position: relative;
@@ -69,35 +70,45 @@
 }
 
 .add-domain-modal-left {
-  padding: 24px;
+  padding:32px 38px;
   padding-right: 24px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  width: 70.05%;
+  padding-bottom: 0px;
+  border-right: 1px solid #D9D9D9;
 }
 
 .add-domain-modal-right {
-  padding: 24px;
-  padding-left: 24px;
-  border-left: 1px solid #e5e7eb;
+  padding: 21px;
+  padding-left: 25px;
+ 
   display: flex;
   flex-direction: column;
   gap: 16px;
   align-items: flex-start;
-  background: #f9fafb;
+ 
+  width: 29.95%;
 }
-
+.add-domain-modal-right-card{
+  padding: 36px 26px 31px 26px;
+  background-color: #F2F2FB;
+  border-radius: 10px;
+  width: 100%;
+  max-width: 308px;
+}
 .add-domain-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #333;
+  font-size: 18px;
+  color: #262E84;
+  
 }
 
 /* Domain Inputs */
 .domain-inputs-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 19px;
 }
 
 .domain-input-row {
@@ -108,11 +119,11 @@
 
 .domain-input {
   flex: 1;
-  padding: 10px 16px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 14px;
-  color: #333;
+  padding: 13px 14px;
+  border: 1px solid #45425E66;
+  border-radius: 10px;
+  font-size: 18px;
+  color: #262E84;
   transition: border-color 0.2s;
 }
 
@@ -167,8 +178,8 @@
 /* Billing Options */
 .add-domain-billing-options {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+
+  gap: 37px;
 }
 
 .billing-option {
@@ -185,44 +196,37 @@
   accent-color: #262E84;
 }
 
-.billing-option-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #333;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+
 
 .billing-discount-tag {
   padding: 2px 8px;
-  background: #3B82F6;
+  background: #262E84;
   color: white;
-  font-size: 11px;
-  font-weight: 600;
-  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
 }
 
 /* Footer */
 .add-domain-modal-footer {
-  padding: 24px;
-  border-top: 1px solid #e5e7eb;
+  padding-top: 37px;
+  padding-bottom: 27px;
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
 }
 
 .add-domain-pay-btn {
-  padding: 12px 48px;
-  background: #262E84;
+  padding: 16.5px 126px;
+  background: #118A41;
   color: white;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   font-size: 14px;
-  font-weight: 600;
+  
   cursor: pointer;
   transition: background-color 0.2s;
   width: 100%;
-  max-width: 200px;
+  max-width: 308px;
 }
 
 .add-domain-pay-btn:hover {

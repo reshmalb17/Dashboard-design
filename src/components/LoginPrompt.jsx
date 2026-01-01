@@ -198,7 +198,7 @@ export default function LoginPrompt() {
     <div className="login-prompt-container">
       {/* Background Lines - positioned absolutely to cover full container */}
       <div className="background-lines">
-        <img src={backgroundLines} alt="" className="background-lines-image" />
+        {/* <img src={backgroundLines} alt="" className="background-lines-image" /> */}
       </div>
       
       {/* ConsentBit Logo - centered at top */}

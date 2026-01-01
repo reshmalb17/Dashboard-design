@@ -6,7 +6,8 @@
   bottom: 0;
   background: rgba(0, 0, 0, 0.5);
   z-index: 1000;
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(15px);
+  background: #0A091F38;
 }
 
 .purchase-modal {
@@ -15,11 +16,11 @@
   left: 50%;
   transform: translate(-50%, -50%);
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border-radius: 10px;
+box-shadow: 0px 24px 33px 0px #262E8433;
   z-index: 1001;
   width: 90%;
-  max-width: 600px;
+  max-width: 688px;
   overflow: hidden;
 }
 
@@ -27,15 +28,15 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 24px;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 24px 15px 13px 29px;
+  border-bottom: 1px solid #00000020;
 }
 
 .purchase-modal-title {
   margin: 0;
   font-size: 20px;
-  font-weight: 600;
-  color: #333;
+  font-weight: 500;
+ 
 }
 
 .purchase-modal-close {
@@ -55,25 +56,42 @@
 .purchase-modal-close:hover {
   background: #f3f4f6;
 }
+.purchase-modal-right {
+  border: 1.5px solid #262E84;
+  background-color: #F2F2FB;
+  border-radius: 10px;
+  padding: 36px 33px 31px 33px;
+}
+
+
 
 .purchase-modal-body {
-  padding: 24px;
+  padding: 11px 28px;
+  padding-right: 11px;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 32px;
+  gap: 22px;
 }
 
 .purchase-modal-left,
 .purchase-modal-right {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  
 }
 
-.purchase-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #333;
+.purchase-modal-left .purchase-label {
+  font-size: 18px;
+  font-weight: 400;
+  color: #262E84;
+  margin-bottom: 19px;
+  margin-top:18px ;
+}
+
+.purchase-modal-right .purchase-label {
+  font-size: 18px;
+  font-weight: 400;
+  color: #262E84;
 }
 
 /* Quantity Controls */
@@ -81,9 +99,11 @@
   display: flex;
   align-items: center;
   gap: 0;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
+  padding: 4.2px 0px;
+  border-radius: 10px;
   overflow: hidden;
+  border: 1px solid #45425E66;
+  margin-bottom: 38px;
 }
 
 .quantity-btn {
@@ -115,9 +135,9 @@
   border: none;
   background: white;
   text-align: center;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 500;
-  color: #333;
+ color: #262E84;
   outline: none;
 }
 
@@ -136,13 +156,13 @@
 /* Pay Now Button */
 .purchase-pay-btn {
   width: 100%;
-  padding: 12px 24px;
+  padding: 16.5px 24px;
   background: #262E84;
   color: white;
   border: none;
-  border-radius: 8px;
+  border-radius:6px;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   transition: background-color 0.2s;
   margin-top: 8px;
@@ -158,16 +178,16 @@
 
 /* Cost Section */
 .purchase-price {
-  font-size: 32px;
-  font-weight: 600;
-  color: #333;
+  font-size: 80px;
+  font-weight: 200;
+  
 }
 
 /* Billing Options */
 .purchase-billing-options {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  
+  gap: 37px;
 }
 
 .billing-option {
@@ -185,12 +205,12 @@
 }
 
 .billing-option-label {
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 500;
-  color: #333;
+  color: #262E84;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 1px;
 }
 
 .billing-discount-tag {
@@ -211,7 +231,7 @@
 
   .purchase-modal-body {
     grid-template-columns: 1fr;
-    gap: 24px;
+    gap: 10px;
   }
 }
 

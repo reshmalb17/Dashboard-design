@@ -8,14 +8,15 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  margin-bottom: 18px;
 }
 
 .domains-title {
-  font-size: 28px;
-  font-weight: 600;
-  color: #262E84;
+  font-size: 20px;
+  font-weight: 500;
+  
   margin: 0;
+  margin-top: 32px;
 }
 
 .domains-search-wrapper {
@@ -23,6 +24,7 @@
   display: flex;
   align-items: center;
   gap: 0;
+  margin-top: 8px;
 }
 
 .domains-search-input {
@@ -98,16 +100,16 @@
 .domains-filters {
   display: flex;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 15px;
   flex-wrap: wrap;
   align-items: center;
 }
 
 .domains-filter-select {
   padding: 10px 16px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  background: white;
+  border: 1px solid #8B77F94D;
+  border-radius: 50px;
+  background: #FFFFFF80;
   color: #333;
   font-size: 14px;
   font-weight: 500;
@@ -134,9 +136,9 @@
 .status-dropdown-button {
   width: 100%;
   padding: 10px 16px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  background: white;
+  border: 1px solid #8B77F94D;
+  border-radius: 50px;
+  background: #FFFFFF80;
   color: #333;
   font-size: 14px;
   font-weight: 500;
@@ -231,7 +233,7 @@
   width: 40px;
   height: 40px;
   border: 1px solid #d1d5db;
-  border-radius: 8px;
+  border-radius: 50px;
   background: white;
   cursor: pointer;
   transition: all 0.2s;
@@ -246,9 +248,10 @@
 .domains-table-wrapper {
   background: white;
   border-radius: 10px;
-  overflow: hidden;
+ 
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  overflow-x: auto;
+   overflow-x: auto;     /* keep horizontal scroll */
+  overflow-y: visible;
 }
 
 .domains-table {
@@ -258,7 +261,7 @@
 }
 
 .domains-table thead {
-  background: #f9fafb;
+  background: #F2F7FF;
 }
 
 .domains-table th {
@@ -287,9 +290,11 @@
 .domains-table td {
   padding: 16px;
   font-size: 14px;
-  color: #333;
+ 
 }
-
+.domain-cell-content span.yearly {
+    color: #524693;
+}
 .domain-cell-content {
   display: flex;
   align-items: center;
@@ -302,7 +307,7 @@
   align-items: center;
   padding: 6px 12px;
   border-radius: 20px;
-  font-size: 13px;
+  font-size: 10px;
   font-weight: 500;
   white-space: nowrap;
 }
@@ -324,7 +329,7 @@
   gap: 6px;
   padding: 6px 12px;
   border-radius: 20px;
-  font-size: 13px;
+  font-size: 10px;
   font-weight: 500;
   white-space: nowrap;
 }
@@ -348,10 +353,23 @@
 }
 
 /* Billing Period */
-.billing-monthly {
-  color: #3B82F6;
-  font-weight: 500;
+
+.domain-context-menu {
+  position: absolute;
+  top: 28px;
+
+  right: 0;              /* anchor to button */
+  transform: translateX(-8px); /* pull it slightly left */
+
+  z-index: 9999;
+  min-width: 180px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0px 8px 24px rgba(0,0,0,0.12);
+  padding: 6px 0;
 }
+
+
 
 /* License Key */
 .domain-license-key {
@@ -359,9 +377,9 @@
 }
 
 .license-key-text {
-  font-family: 'Courier New', monospace;
-  font-size: 13px;
-  color: #333;
+  
+  font-size: 14px;
+ 
 }
 
 .license-key-copy {
@@ -414,6 +432,7 @@
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   z-index: 1000;
   min-width: 180px;
+  max-width: 174px;
   overflow: hidden;
 }
 
@@ -424,7 +443,7 @@
   text-align: left;
   border: none;
   background: white;
-  color: #333;
+  
   font-size: 14px;
   cursor: pointer;
   transition: background-color 0.2s;

@@ -14,8 +14,8 @@
   flex: 1;
   width: 100%;
   max-width: 100%;
-  height: calc(100vh - 80px);
-  max-height: calc(100vh - 80px);
+  height: calc(100vh - 120px);
+  max-height: calc(100vh - 120px);
   overflow: hidden;
 }
 
@@ -27,6 +27,7 @@
   height: 100%;
   max-height: 100%;
   padding: 20px;
+  padding-top: 0px;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -39,12 +40,12 @@
 }
 
 .dashboard-header {
-  background: white;
+  
   width: 100%;
   max-width: 100%;
-  padding: 20px 30px;
+  padding: 22px 22px 12px 22px;
   border-radius: 10px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  
   position: sticky;
   top: 0;
   z-index: 100;
@@ -55,7 +56,11 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  max-width: 100%;
+  /* max-width: 1396px;
+  margin: 0 auto; */
+padding: 22px 30px 24.3px 30px;
+background-color: #fff;
+  border-radius: 10px;
 }
 
 /* Header Logo */
@@ -65,8 +70,8 @@
 }
 
 .header-logo-image {
-  height: 32px;
-  width: auto;
+  height: 23px;
+  width: 193px;
   object-fit: contain;
 }
 
@@ -83,18 +88,20 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 10px 16px;
-  border: 1px solid #d1d5db;
+  padding: 12px 20px;
+  border: 1px solid #262E84;
   border-radius: 8px;
   background: white;
-  color: #3B82F6;
+  color: #262E84!important;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
   white-space: nowrap;
 }
-
+button.header-btn.header-btn-primary {
+    color: #fff !important;
+}
 .header-btn:hover {
   background: #f9fafb;
   border-color: #9ca3af;
@@ -298,7 +305,8 @@
 }
 
 .dashboard-content {
-  padding: 30px;
+  padding-left: 25px;
+  padding-top: 0px;
   width: 100%;
   max-width: 100%;
   height: 100%;
@@ -457,10 +465,10 @@
 }
 
 .license-key {
-  font-family: 'Courier New', monospace;
-  font-size: 14px;
-  color: #333;
-  font-weight: bold;
+  
+  font-size: 10px;
+  color: #524693;
+ 
 }
 
 .copy-btn {
@@ -532,17 +540,19 @@
 }
 
 .login-container {
+  background-image: url("./assets/loginBg.png");
+  background-size: cover;
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+
 }
 
 .login-prompt {
   text-align: center;
-  padding: 100px 20px;
-  max-width: 500px;
+  padding: 0px 0px;
+  max-width: 464px;
   width: 100%;
   margin: 0 auto;
  
@@ -560,8 +570,16 @@
 }
 
 .login-prompt p {
-  color: #666;
-  margin-bottom: 30px;
+  color: #262E84;
+ 
+font-weight: 400;
+
+font-size: 14px;
+
+line-height: 100%;
+letter-spacing: -3%;
+padding-top: 8px;
+  margin-bottom: 39px;
 }
 
 .login-link {
