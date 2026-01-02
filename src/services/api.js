@@ -64,12 +64,6 @@ export async function getDashboard(userEmail) {
     const normalizedEmail = userEmail.toLowerCase().trim();
     
     const url = `${API_BASE}/dashboard?email=${encodeURIComponent(normalizedEmail)}`;
-    console.log('[API] Fetching dashboard data:', {
-      url,
-      userEmail: normalizedEmail,
-      API_BASE,
-      originalEmail: userEmail
-    });
     
     // Try email-based endpoint first (for Memberstack users) with timeout
     let response;
@@ -84,21 +78,6 @@ export async function getDashboard(userEmail) {
         }),
         createTimeoutPromise(REQUEST_TIMEOUT)
       ]);
-      
-      // Log response immediately for debugging
-      console.log('[API] Dashboard API response received:', {
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok
-      });
-      
-      console.log('[API] Dashboard response status:', {
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok,
-        url: response.url,
-        headers: Object.fromEntries(response.headers.entries())
-      });
     } catch (error) {
       if (error.message === 'Request timeout') {
         throw new Error('Request timeout - server took too long to respond');
@@ -135,11 +114,6 @@ export async function getDashboard(userEmail) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[API] ❌ Dashboard response not OK:', {
-        status: response.status,
-        statusText: response.statusText,
-        errorText
-      });
       
       // Handle specific error cases (matching reference dashboard)
       if (response.status === 401) {
@@ -152,21 +126,8 @@ export async function getDashboard(userEmail) {
     }
 
     const data = await response.json();
-    console.log('[API] Dashboard data received:', {
-      hasSites: !!data.sites,
-      sitesCount: data.sites ? Object.keys(data.sites).length : 0,
-      hasSubscriptions: !!data.subscriptions,
-      subscriptionsType: Array.isArray(data.subscriptions) ? 'array' : typeof data.subscriptions,
-      subscriptionsCount: Array.isArray(data.subscriptions) 
-        ? data.subscriptions.length 
-        : data.subscriptions ? Object.keys(data.subscriptions).length : 0,
-      hasPendingSites: !!data.pendingSites,
-      pendingSitesCount: data.pendingSites ? data.pendingSites.length : 0,
-      fullResponse: data
-    });
     return data;
   } catch (error) {
-    console.error('[API] Error loading dashboard:', error);
     throw error;
   }
 }
@@ -241,23 +202,12 @@ export async function getLicenses(userEmail) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[API] Licenses response not OK:', {
-        status: response.status,
-        statusText: response.statusText,
-        errorText
-      });
       throw new Error(`Failed to load licenses: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
-    console.log('[API] Licenses data received:', {
-      hasLicenses: !!data.licenses,
-      licensesCount: data.licenses ? data.licenses.length : 0,
-      fullResponse: data
-    });
     return data;
   } catch (error) {
-    console.error('[API] Error loading licenses:', error);
     throw error;
   }
 }
@@ -319,3 +269,97 @@ export async function removePendingSite(userEmail, site) {
   });
 }
 
+// Cancel subscription (uses /remove-site endpoint)
+export async function cancelSubscription(userEmail, site, subscriptionId) {
+  return apiRequest('/remove-site', {
+    method: 'POST',
+    body: JSON.stringify({ 
+      email: userEmail,
+      site: site,
+      subscription_id: subscriptionId
+    }),
+  });
+}
+
+// Get user profile data from database
+// COMMENTED OUT: Profile API endpoint doesn't exist yet
+/*
+export async function getUserProfile(userEmail) {
+  try {
+    // Validate email before making API call
+    if (!userEmail || !userEmail.includes('@')) {
+      console.error('[API] ❌ Invalid email for profile API call:', userEmail);
+      throw new Error('Invalid email address. Please log out and log in again.');
+    }
+    
+    // Normalize email (lowercase and trim)
+    const normalizedEmail = userEmail.toLowerCase().trim();
+    
+    const url = `${API_BASE}/profile?email=${encodeURIComponent(normalizedEmail)}`;
+    console.log('[API] Fetching user profile:', {
+      url,
+      userEmail: normalizedEmail,
+      API_BASE
+    });
+    
+    // Try profile endpoint first
+    let response;
+    try {
+      response = await Promise.race([
+        fetch(url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include'
+        }),
+        createTimeoutPromise(REQUEST_TIMEOUT_SHORT)
+      ]);
+    } catch (error) {
+      if (error.message === 'Request timeout') {
+        throw new Error('Request timeout - server took too long to respond');
+      }
+      throw error;
+    }
+
+    // If profile endpoint doesn't exist (404), try getting user data from dashboard endpoint
+    if (!response.ok && response.status === 404) {
+      console.log('[API] Profile endpoint not found, trying dashboard endpoint for user data...');
+      const dashboardData = await getDashboard(userEmail);
+      // Extract user info from dashboard response if available
+      if (dashboardData.user) {
+        return dashboardData.user;
+      }
+      // Fallback: return basic info from email
+      return {
+        email: normalizedEmail,
+        name: normalizedEmail.split('@')[0],
+        plan: dashboardData.plan || 'N/A',
+        created_at: dashboardData.created_at || null,
+      };
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[API] Profile response not OK:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorText
+      });
+      throw new Error(`Failed to load profile: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log('[API] Profile data received:', {
+      hasName: !!data.name,
+      hasEmail: !!data.email,
+      hasPlan: !!data.plan,
+      fullResponse: data
+    });
+    return data;
+  } catch (error) {
+    console.error('[API] Error loading profile:', error);
+    throw error;
+  }
+}
+*/

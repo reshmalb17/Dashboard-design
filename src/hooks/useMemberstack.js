@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { checkMemberstackSession, getUserEmail, waitForSDK, refreshSession, isSessionExpired } from '../services/memberstack';
 
 /**
@@ -17,7 +17,6 @@ export function useMemberstack() {
     async function checkSession(skipLoadingState = false) {
       // Prevent concurrent session checks
       if (isChecking) {
-        console.log('[useMemberstack] Session check already in progress, skipping...');
         return;
       }
       
@@ -40,8 +39,6 @@ export function useMemberstack() {
 
         if (!memberstack) {
           // SDK not loaded yet after timeout - show login prompt anyway
-          console.warn('[Memberstack] SDK not loaded after 5 second timeout, showing login prompt');
-          console.warn('[Memberstack] Check browser console for SDK loading errors');
           if (mounted) {
             setMember(null);
             setLoading(false);
@@ -52,26 +49,57 @@ export function useMemberstack() {
           return;
         }
         
-        console.log('[useMemberstack] SDK loaded successfully, checking session...');
 
         // Check session
         const currentMember = await checkMemberstackSession();
         
         if (mounted) {
-          // Only update state if member actually changed to prevent unnecessary re-renders
+          // Update state if member changed - use deep comparison to detect profile updates
           setMember(prevMember => {
-            // Compare by ID to avoid unnecessary updates
+            // If no previous member, always update (first load)
+            if (!prevMember) {
+              return currentMember;
+            }
+            
+            // If no current member but we had one before, keep the previous one
+            // Don't clear state unless we're sure the session is invalid
+            // This prevents losing data during temporary SDK issues
+            if (!currentMember) {
+              return prevMember; // Keep previous member instead of clearing
+            }
+            
+            // Compare IDs first (fast check)
             const prevId = prevMember?.id || prevMember?._id;
             const newId = currentMember?.id || currentMember?._id;
-            if (prevId === newId && prevMember && currentMember) {
-              return prevMember; // No change, return previous to prevent re-render
+            
+            // If IDs are different, definitely update
+            if (prevId !== newId) {
+              return currentMember;
             }
-            return currentMember;
+            
+            // If IDs are same, do a deep comparison using JSON.stringify
+            // Only update if the actual data structure changed (not just object reference)
+            const prevStr = JSON.stringify(prevMember);
+            const newStr = JSON.stringify(currentMember);
+            
+            if (prevStr !== newStr) {
+              // Only log if key fields changed (not just object reference)
+              const prevEmail = getUserEmail(prevMember);
+              const newEmail = getUserEmail(currentMember);
+              const prevName = prevMember?.name || prevMember?.data?.name || prevMember?.firstName;
+              const newName = currentMember?.name || currentMember?.data?.name || currentMember?.firstName;
+              const prevPlan = prevMember?.plan || prevMember?.data?.plan;
+              const newPlan = currentMember?.plan || currentMember?.data?.plan;
+              
+              return currentMember;
+            }
+            
+            // If nothing changed, return previous to prevent re-render
+            return prevMember;
           });
           setLoading(false);
         }
       } catch (err) {
-        console.error('[useMemberstack] Error:', err);
         if (mounted) {
           setError(err.message);
           setMember(null);
@@ -114,6 +142,7 @@ export function useMemberstack() {
     setupAuthListener();
 
     // Session management: Check and refresh session periodically
+    // Only refresh when session is actually expired - don't refresh member data unnecessarily
     // Only run if we have a member (don't check on login page)
     const sessionCheckInterval = setInterval(async () => {
       if (mounted && member) {
@@ -124,11 +153,13 @@ export function useMemberstack() {
             await refreshSession();
             checkSession(true); // Skip loading state
           }
+          // Don't refresh member data if session is not expired
+          // This prevents unnecessary re-renders in Profile component
         } catch (err) {
           console.warn('[Memberstack] Session check error:', err);
         }
       }
-    }, 5 * 60 * 1000); // Check every 5 minutes
+    }, 10 * 60 * 1000); // Check every 10 minutes (only check if session expired, don't refresh data)
 
     // Session refresh on visibility change (when user returns to tab)
     // Add debounce to prevent excessive calls
@@ -241,9 +272,17 @@ export function useMemberstack() {
     };
   }, []);
 
+  // Memoize userEmail to prevent recalculating on every render
+  // Only recalculate when member actually changes
+  const userEmail = useMemo(() => {
+    if (!member) return null;
+    const email = getUserEmail(member);
+    return email;
+  }, [member]);
+
   return {
     member,
-    userEmail: getUserEmail(member),
+    userEmail,
     isAuthenticated: !!member,
     loading,
     error,

@@ -1,64 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNotification } from '../hooks/useNotification';
+import { cancelSubscription } from '../services/api';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../hooks/useDashboardQueries';
+import { useMemberstack } from '../hooks/useMemberstack';
 import './Licenses.css';
-
-// Mock license keys data for design
-const mockLicenses = [
-  {
-    id: '1',
-    licenseKey: 'KEY-GN5B-PUHB-7NLK',
-    status: 'Available',
-    billingPeriod: 'Yearly',
-    activatedForSite: 'Not Assigned',
-    createdDate: '12/12/26',
-    expiryDate: '12/12/26',
-  },
-  {
-    id: '2',
-    licenseKey: 'KEY-GN5B-PUHB-7NLK',
-    status: 'Available',
-    billingPeriod: 'Monthly',
-    activatedForSite: 'Not Assigned',
-    createdDate: '12/12/26',
-    expiryDate: '12/12/26',
-  },
-  {
-    id: '3',
-    licenseKey: 'KEY-GN5B-PUHB-7NLK',
-    status: 'Available',
-    billingPeriod: 'Yearly',
-    activatedForSite: 'Not Assigned',
-    createdDate: '12/12/26',
-    expiryDate: '12/12/26',
-  },
-  {
-    id: '4',
-    licenseKey: 'KEY-GN5B-PUHB-7NLK',
-    status: 'Available',
-    billingPeriod: 'Yearly',
-    activatedForSite: 'Not Assigned',
-    createdDate: '12/12/26',
-    expiryDate: '12/12/26',
-  },
-  {
-    id: '5',
-    licenseKey: 'KEY-GN5B-PUHB-7NLK',
-    status: 'Available',
-    billingPeriod: 'Yearly',
-    activatedForSite: 'Not Assigned',
-    createdDate: '12/12/26',
-    expiryDate: '12/12/26',
-  },
-  {
-    id: '6',
-    licenseKey: 'KEY-GN5B-PUHB-7NLK',
-    status: 'Available',
-    billingPeriod: 'Yearly',
-    activatedForSite: 'Not Assigned',
-    createdDate: '12/12/26',
-    expiryDate: '12/12/26',
-  },
-];
 
 export default function Licenses({ licenses }) {
   const [activeTab, setActiveTab] = useState('Not Assigned');
@@ -68,22 +14,56 @@ export default function Licenses({ licenses }) {
   const [contextMenu, setContextMenu] = useState(null);
   const [activateModal, setActivateModal] = useState(null);
   const [domainInput, setDomainInput] = useState('');
+  const [copiedKey, setCopiedKey] = useState(null);
+  const [isCancelling, setIsCancelling] = useState(false);
   const contextMenuRef = useRef(null);
   const searchInputRef = useRef(null);
   const { showSuccess, showError } = useNotification();
-
-  // Use mock data if licenses array is empty
+  const queryClient = useQueryClient();
+  const { userEmail } = useMemberstack();
+  // Use real data - return empty array if no licenses
   const displayLicenses = licenses && licenses.length > 0 
-    ? licenses.map(lic => ({
-        id: lic.id || lic.license_key,
-        licenseKey: lic.license_key || lic.licenseKey || 'KEY-GN5B-PUHB-7NLK',
-        status: lic.status || 'Available',
-        billingPeriod: lic.billing_period || lic.billingPeriod || 'Yearly',
-        activatedForSite: lic.activated_for_site || lic.activatedForSite || 'Not Assigned',
-        createdDate: lic.created_date || lic.createdDate || '12/12/26',
-        expiryDate: lic.expiry_date || lic.expiryDate || '12/12/26',
-      }))
-    : mockLicenses;
+    ? licenses.map(lic => {
+        // Determine activated site - check multiple possible fields
+        const activatedForSite = lic.activated_for_site || lic.activatedForSite || lic.used_site_domain || lic.site_domain || 'Not Assigned';
+        
+        // Determine if license is activated (has a site domain assigned)
+        const isActivated = activatedForSite !== 'Not Assigned' && 
+                           activatedForSite !== null && 
+                           activatedForSite !== undefined && 
+                           activatedForSite !== '' &&
+                           String(activatedForSite).trim() !== '';
+        
+        // Determine status: If activated, show "Active", otherwise show "Available"
+        let status = 'Available';
+        if (isActivated) {
+          // License is activated - show "Active" unless backend explicitly says it's cancelled/inactive
+          const backendStatus = (lic.status || '').toLowerCase().trim();
+          if (backendStatus === 'cancelled' || backendStatus === 'canceled' || backendStatus === 'inactive') {
+            // Only override with cancelled/inactive if backend explicitly says so
+            status = lic.status.charAt(0).toUpperCase() + lic.status.slice(1); // Capitalize first letter
+          } else {
+            // License is activated - always show "Active" (override any backend status)
+            status = 'Active';
+          }
+        } else {
+          // License is not activated (Not Assigned) - always show "Available"
+          status = 'Available';
+        }
+        
+        return {
+          id: lic.id || lic.license_key,
+          licenseKey: lic.license_key || lic.licenseKey || 'N/A',
+          status: status,
+          billingPeriod: lic.billing_period || lic.billingPeriod || 'N/A',
+          activatedForSite: activatedForSite,
+          createdDate: lic.created_date || lic.createdDate || 'N/A',
+          expiryDate: lic.expiry_date || lic.expiryDate || 'N/A',
+          subscriptionId: lic.subscription_id || lic.subscriptionId || null,
+          siteDomain: lic.used_site_domain || lic.site_domain || null,
+        };
+      })
+    : [];
 
   // Close context menu when clicking outside
   useEffect(() => {
@@ -100,11 +80,41 @@ export default function Licenses({ licenses }) {
   }, [contextMenu]);
 
   const handleCopy = async (key) => {
+    if (!key || key === 'N/A') {
+      return;
+    }
+    
     try {
-      await navigator.clipboard.writeText(key);
+      // Use modern clipboard API
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(key);
+      } else {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = key;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+          document.execCommand('copy');
+        } catch (err) {
+          // Fallback copy failed
+        }
+        document.body.removeChild(textArea);
+      }
+      
+      // Show feedback
+      setCopiedKey(key);
       showSuccess('License key copied to clipboard');
+      setTimeout(() => {
+        setCopiedKey(null);
+      }, 2000);
     } catch (err) {
-      console.error('Failed to copy license key:', err);
+      // Failed to copy license key
+      showError('Failed to copy license key');
     }
   };
 
@@ -121,15 +131,66 @@ export default function Licenses({ licenses }) {
     }
   };
 
-  const handleContextMenu = (e, licenseId) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setContextMenu({
-      licenseId,
-      x: e.clientX,
-      y: e.clientY,
-    });
+  const handleCancelSubscription = async (subscriptionId, siteDomain, licenseKey) => {
+    if (isCancelling) {
+      return; // Prevent multiple clicks
+    }
+
+    if (!userEmail) {
+      showError('User email not found. Please refresh the page.');
+      return;
+    }
+
+    if (!subscriptionId) {
+      showError('Subscription ID not found.');
+      return;
+    }
+
+    if (!siteDomain) {
+      showError('Site domain not found.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to cancel the subscription for "${siteDomain}"? This will cancel the entire subscription and all sites in it. The subscription will remain active until the end of the current billing period.`
+    );
+
+    if (!confirmed) {
+      setContextMenu(null);
+      return;
+    }
+
+    setIsCancelling(true);
+    setContextMenu(null); // Close menu immediately
+
+    try {
+      const response = await cancelSubscription(userEmail, siteDomain, subscriptionId);
+      const message = response.message || 'Subscription cancelled successfully. The subscription will remain active until the end of the current billing period.';
+      showSuccess(message);
+      
+      // Refresh dashboard data
+      await queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(userEmail) });
+    } catch (error) {
+      const errorMessage = error.message || error.error || 'Unknown error';
+      showError('Failed to cancel subscription: ' + errorMessage);
+    } finally {
+      setIsCancelling(false);
+    }
   };
+
+  const handleContextMenu = (e, licenseId) => {
+  e.preventDefault();
+  e.stopPropagation();
+
+  const rect = e.currentTarget.getBoundingClientRect();
+
+  setContextMenu({
+    licenseId,
+    top: rect.bottom + 6,   // below button
+    left: rect.left - 180,  // open to left
+  });
+};
+
 
   const handleOpenActivateModal = (licenseId) => {
     setActivateModal(licenseId);
@@ -156,9 +217,13 @@ export default function Licenses({ licenses }) {
   // Filter licenses based on active tab, search, and billing period
   const filteredLicenses = displayLicenses.filter(license => {
     // Tab filter
-    if (activeTab === 'Not Assigned' && license.activatedForSite !== 'Not Assigned') return false;
-    if (activeTab === 'Activated' && license.activatedForSite === 'Not Assigned') return false;
-    if (activeTab === 'Cancelled' && license.status !== 'Cancelled') return false;
+    if (activeTab === 'Not Assigned' && license.activatedForSite !== 'Not Assigned') {
+      return false;
+    } else if (activeTab === 'Activated' && (license.activatedForSite === 'Not Assigned' || license.status !== 'Active')) {
+      return false;
+    } else if (activeTab === 'Cancelled' && license.status !== 'Cancelled') {
+      return false;
+    }
     
     // Search filter
     if (searchQuery && !license.licenseKey.toLowerCase().includes(searchQuery.toLowerCase())) {
@@ -199,7 +264,7 @@ export default function Licenses({ licenses }) {
               </svg>
             </button>
           </div>
-          <select
+          {/* <select
             className="licenses-billing-filter"
             value={billingPeriodFilter}
             onChange={(e) => setBillingPeriodFilter(e.target.value)}
@@ -207,11 +272,12 @@ export default function Licenses({ licenses }) {
             <option value="">Billing Period</option>
             <option value="Monthly">Monthly</option>
             <option value="Yearly">Yearly</option>
-          </select>
+          </select> */}
         </div>
       </div>
 
       {/* Filter Tabs */}
+      <div className="licenses-filter-tabs">
       <div className="licenses-tabs">
         <button
           className={`licenses-tab ${activeTab === 'Not Assigned' ? 'active' : ''}`}
@@ -233,6 +299,18 @@ export default function Licenses({ licenses }) {
         </button>
       </div>
 
+      <div>
+         <select
+            className="licenses-billing-filter"
+            value={billingPeriodFilter}
+            onChange={(e) => setBillingPeriodFilter(e.target.value)}
+          >
+            <option value="">Billing Period</option>
+            <option value="Monthly">Monthly</option>
+            <option value="Yearly">Yearly</option>
+          </select>
+      </div>
+</div>
       {/* Table */}
       <div className="licenses-table-wrapper">
         <table className="licenses-table">
@@ -257,32 +335,54 @@ export default function Licenses({ licenses }) {
               </tr>
             ) : (
               filteredLicenses.map((license, index) => (
-                <tr key={license.id || index} className={index === 5 ? 'highlighted' : ''}>
+                <tr key={license.id || index} className={index === 5 ? 'highlighted' : ''} style={{
+    background:
+      contextMenu?.licenseId === (license.id || index)
+        ? '#0777E61A'
+        : 'transparent',
+  }}>
                   <td>
                     <div className="license-cell-content license-key-cell">
                       <span className="license-key-text">{license.licenseKey}</span>
                       <button
                         className="license-view-btn"
                         onClick={() => handleCopy(license.licenseKey)}
-                        title="View License Key"
+                        title={copiedKey === license.licenseKey ? "Copied!" : "Copy license key"}
+                        disabled={license.licenseKey === 'N/A'}
+                        style={{
+                          opacity: copiedKey === license.licenseKey ? 0.6 : 1,
+                          cursor: license.licenseKey === 'N/A' ? 'not-allowed' : 'pointer'
+                        }}
                       >
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M1 8C1 8 3.5 3 8 3C12.5 3 15 8 15 8C15 8 12.5 13 8 13C3.5 13 1 8 1 8Z" stroke="#666" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                          <circle cx="8" cy="8" r="2" stroke="#666" strokeWidth="1.5"/>
-                        </svg>
+                        {copiedKey === license.licenseKey ? (
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect width="16" height="16" rx="3" fill="#10B981" />
+                            <path d="M4 8L6.5 10.5L12 5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        ) : (
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect width="16" height="16" rx="3" fill="#DEE8F4"/>
+                            <path d="M9.7333 8.46752V10.1825C9.7333 11.6117 9.16163 12.1834 7.73245 12.1834H6.01745C4.58827 12.1834 4.0166 11.6117 4.0166 10.1825V8.46752C4.0166 7.03834 4.58827 6.46667 6.01745 6.46667H7.73245C9.16163 6.46667 9.7333 7.03834 9.7333 8.46752Z" stroke="#292D32" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M12.1835 6.01751V7.73251C12.1835 9.16169 11.6118 9.73336 10.1826 9.73336H9.73348V8.46752C9.73348 7.03834 9.16181 6.46667 7.73264 6.46667H6.4668V6.01751C6.4668 4.58833 7.03847 4.01666 8.46764 4.01666H10.1826C11.6118 4.01666 12.1835 4.58833 12.1835 6.01751Z" stroke="#292D32" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
                       </button>
                     </div>
                   </td>
                   <td>
                     <div className="license-cell-content">
-                      <span className="license-status-available">
-                        <span className="status-dot-blue" />
+                      <span className={`license-status-${license.status.toLowerCase() === 'active' ? 'active' : license.status.toLowerCase() === 'cancelled' ? 'cancelled' : 'available'}`}>
+                        <span className={`status-dot-${license.status.toLowerCase() === 'active' ? 'green' : license.status.toLowerCase() === 'cancelled' ? 'red' : 'blue'}`} />
                         <span>{license.status}</span>
                       </span>
                     </div>
                   </td>
                   <td>
-                    <div className="license-cell-content">
+                    <div  className={`license-cell-content ${
+    license.billingPeriod === 'Monthly'
+      ? 'billing-monthly'
+      : 'billing-yearly'
+  }`}>
                       {license.billingPeriod}
                     </div>
                   </td>
@@ -310,10 +410,12 @@ export default function Licenses({ licenses }) {
                         title="Activate License"
                         onClick={() => handleOpenActivateModal(license.id || index)}
                       >
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <circle cx="8" cy="8" r="7" fill="#10B981" stroke="white" strokeWidth="1"/>
-                          <path d="M8 5V11M5 8H11" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-                        </svg>
+                       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M8 12H16" stroke="#118A41" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M12 16V8" stroke="#118A41" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M9 22H15C20 22 22 20 22 15V9C22 4 20 2 15 2H9C4 2 2 4 2 9V15C2 20 4 22 9 22Z" stroke="#118A41" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+
                       </button>
                     </div>
                   </td>
@@ -324,11 +426,11 @@ export default function Licenses({ licenses }) {
                         onClick={(e) => handleContextMenu(e, license.id || index)}
                         title="More options"
                       >
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M10 10.5C10.4142 10.5 10.75 10.1642 10.75 9.75C10.75 9.33579 10.4142 9 10 9C9.58579 9 9.25 9.33579 9.25 9.75C9.25 10.1642 9.58579 10.5 10 10.5Z" fill="#666"/>
-                          <path d="M10 5.5C10.4142 5.5 10.75 5.16421 10.75 4.75C10.75 4.33579 10.4142 4 10 4C9.58579 4 9.25 4.33579 9.25 4.75C9.25 5.16421 9.58579 5.5 10 5.5Z" fill="#666"/>
-                          <path d="M10 15.5C10.4142 15.5 10.75 15.1642 10.75 14.75C10.75 14.3358 10.4142 14 10 14C9.58579 14 9.25 14.3358 9.25 14.75C9.25 15.1642 9.58579 15.5 10 15.5Z" fill="#666"/>
-                        </svg>
+                             <svg width="17" height="3" viewBox="0 0 17 3">
+  <circle cx="1.5" cy="1.5" r="1.5" />
+  <circle cx="8.5" cy="1.5" r="1.5" />
+  <circle cx="15.5" cy="1.5" r="1.5" />
+</svg>
                       </button>
                       {contextMenu?.licenseId === (license.id || index) && (
                         <div
@@ -348,8 +450,11 @@ export default function Licenses({ licenses }) {
                             }}
                           >
                             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M5.5 4.5H3.5C2.67157 4.5 2 5.17157 2 6V12.5C2 13.3284 2.67157 14 3.5 14H10C10.8284 14 11.5 13.3284 11.5 12.5V10.5M5.5 4.5C5.5 3.67157 6.17157 3 7 3H11.5C12.3284 3 13 3.67157 13 4.5V9C13 9.82843 12.3284 10.5 11.5 10.5H7C6.17157 10.5 5.5 9.82843 5.5 9V4.5Z" stroke="#666" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
+<rect width="16" height="16" rx="3" fill="#DEE8F4"/>
+<path d="M9.7333 8.46752V10.1825C9.7333 11.6117 9.16163 12.1834 7.73245 12.1834H6.01745C4.58827 12.1834 4.0166 11.6117 4.0166 10.1825V8.46752C4.0166 7.03834 4.58827 6.46667 6.01745 6.46667H7.73245C9.16163 6.46667 9.7333 7.03834 9.7333 8.46752Z" stroke="#292D32" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M12.1835 6.01751V7.73251C12.1835 9.16169 11.6118 9.73336 10.1826 9.73336H9.73348V8.46752C9.73348 7.03834 9.16181 6.46667 7.73264 6.46667H6.4668V6.01751C6.4668 4.58833 7.03847 4.01666 8.46764 4.01666H10.1826C11.6118 4.01666 12.1835 4.58833 12.1835 6.01751Z" stroke="#292D32" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+
                             <span>Copy License key</span>
                           </button>
                           <button 
@@ -358,19 +463,43 @@ export default function Licenses({ licenses }) {
                               handleOpenActivateModal(license.id || index);
                             }}
                           >
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M8 10C9.10457 10 10 9.10457 10 8C10 6.89543 9.10457 6 8 6C6.89543 6 6 6.89543 6 8C6 9.10457 6.89543 10 8 10Z" stroke="#666" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                              <path d="M12.5 8C12.5 8.5 12.7 9 13 9.5L14.5 11.5C14.8 11.9 14.7 12.4 14.3 12.7L12.5 14C12.1 14.3 11.6 14.2 11.3 13.8L10 12C9.5 12.3 9 12.5 8.5 12.5H6.5C6 12.5 5.5 12.3 5 12L3.7 13.8C3.4 14.2 2.9 14.3 2.5 14L0.7 12.7C0.3 12.4 0.2 11.9 0.5 11.5L2 9.5C2.3 9 2.5 8.5 2.5 8C2.5 7.5 2.3 7 2 6.5L0.5 4.5C0.2 4.1 0.3 3.6 0.7 3.3L2.5 2C2.9 1.7 3.4 1.8 3.7 2.2L5 4C5.5 3.7 6 3.5 6.5 3.5H8.5C9 3.5 9.5 3.7 10 4L11.3 2.2C11.6 1.8 12.1 1.7 12.5 2L14.3 3.3C14.7 3.6 14.8 4.1 14.5 4.5L13 6.5C12.7 7 12.5 7.5 12.5 8Z" stroke="#666" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
+                           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="16" height="16" rx="3" fill="#DEE8F4"/>
+<path d="M7.49672 4.74327L5.83339 5.36994C5.45005 5.51327 5.13672 5.9666 5.13672 6.37327V8.84994C5.13672 9.24327 5.39672 9.75994 5.71339 9.9966L7.14672 11.0666C7.61672 11.4199 8.39005 11.4199 8.86005 11.0666L10.2934 9.9966C10.6101 9.75994 10.8701 9.24327 10.8701 8.84994V6.37327C10.8701 5.96327 10.5567 5.50994 10.1734 5.3666L8.51005 4.74327C8.22672 4.63994 7.77339 4.63994 7.49672 4.74327Z" stroke="#292D32" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M7.0166 7.95673L7.55327 8.49339L8.9866 7.06006" stroke="#292D32" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+
                             <span>Activate License</span>
                           </button>
+                          {license.subscriptionId && 
+                           license.siteDomain && 
+                           license.status !== 'Cancelled' && 
+                           license.status !== 'Expired' && 
+                           license.status !== 'Cancelling' && 
+                           license.status !== 'inactive' && (
+                            <button
+                              className="context-menu-item context-menu-item-danger"
+                              onClick={() => handleCancelSubscription(license.subscriptionId, license.siteDomain, license.licenseKey)}
+                              disabled={isCancelling}
+                            >
+                              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 4L4 12M4 4L12 12" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                              <span>{isCancelling ? 'Cancelling...' : 'Cancel Subscription'}</span>
+                            </button>
+                          )}
                           <button 
                             className="context-menu-item context-menu-item-disabled"
                             disabled
                           >
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M12 4L4 12M4 4L12 12" stroke="#999" strokeWidth="1.5" strokeLinecap="round"/>
-                            </svg>
+                           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g opacity="0.5">
+<rect width="16" height="16" rx="3" fill="#DEE8F4"/>
+<path d="M8.9665 4.66675H7.03317C6.80651 4.66675 6.4865 4.80008 6.3265 4.96008L4.95984 6.32675C4.79984 6.48675 4.6665 6.80675 4.6665 7.03342V8.96675C4.6665 9.19341 4.79984 9.51341 4.95984 9.67341L6.3265 11.0401C6.4865 11.2001 6.80651 11.3334 7.03317 11.3334H8.9665C9.19317 11.3334 9.51317 11.2001 9.67317 11.0401L11.0398 9.67341C11.1998 9.51341 11.3332 9.19341 11.3332 8.96675V7.03342C11.3332 6.80675 11.1998 6.48675 11.0398 6.32675L9.67317 4.96008C9.51317 4.80008 9.19317 4.66675 8.9665 4.66675Z" stroke="#292D32" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M5.64648 10.3601L10.3598 5.64673" stroke="#292D32" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>
+
                             <span>Cancel License</span>
                           </button>
                         </div>

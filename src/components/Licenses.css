@@ -8,14 +8,14 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  margin-bottom: 32px;
 }
 
 .licenses-title {
-  font-size: 28px;
-  font-weight: 600;
-  color: #262E84;
-  margin: 0;
+      font-size: 20px;
+    font-weight: 500;
+    margin: 0;
+    margin-top: 32px;
 }
 
 .licenses-header-controls {
@@ -30,6 +30,7 @@
   display: flex;
   align-items: center;
   gap: 0;
+  margin-top: 8px;
 }
 
 .licenses-search-input {
@@ -98,11 +99,12 @@
 
 /* Billing Period Filter */
 .licenses-billing-filter {
-  padding: 10px 16px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  background: white;
-  color: #333;
+  padding: 13px 19px;
+  border: 1px solid #8B77F94D;
+  border-radius: 50px;
+ 
+background: #FFFFFF80;
+
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -122,16 +124,16 @@
 /* Filter Tabs */
 .licenses-tabs {
   display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 10px;
+  margin-bottom: 11px;
 }
 
 .licenses-tab {
-  padding: 10px 20px;
-  border: 1px solid #E5E7EB;
+  padding: 13px 19px;
+border: 1px solid #8B77F94D;
   background: white;
-  color: #333;
-  font-size: 14px;
+
+  font-size: 15px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
@@ -145,9 +147,9 @@
 
 .licenses-tab.active {
   background: white;
-  color: #262E84;
-  border-color: #262E84;
-  font-weight: 600;
+  color: #0777E6;
+  border-color: #0777E6;
+  
 }
 
 /* Table */
@@ -166,15 +168,15 @@
 }
 
 .licenses-table thead {
-  background: #f9fafb;
+  background: #F2F7FF;
 }
 
 .licenses-table th {
-  padding: 16px;
+  padding:18px 16px;
   text-align: left;
   font-size: 14px;
-  font-weight: 600;
-  color: #333;
+  font-weight: 500;
+ 
   border-bottom: 1px solid #e5e7eb;
   white-space: nowrap;
 }
@@ -200,7 +202,7 @@
 .licenses-table td {
   padding: 16px;
   font-size: 14px;
-  color: #333;
+ 
 }
 
 .license-cell-content {
@@ -215,10 +217,9 @@
 }
 
 .license-key-text {
-  font-family: 'Courier New', monospace;
-  font-size: 13px;
-  color: #333;
-  font-weight: 500;
+
+  font-size: 14px;
+
 }
 
 .license-view-btn {
@@ -244,10 +245,46 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #3B82F6;
+  color:#0777E6;
+border-radius: 50px;
+  font-size: 10px;
   font-weight: 500;
+  padding: 6px 8px;
+ background: #0777E61A;
+
 }
 
+.license-status-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #065F46;
+  border-radius: 50px;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 6px 8px;
+  background: #D1FAE5;
+}
+
+.license-status-cancelled {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #991B1B;
+  border-radius: 50px;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 6px 8px;
+  background: #FEE2E2;
+}
+
+.license-cell-content.billing-yearly {
+    color: #524693;
+}
+.license-cell-content.billing-monthly {
+    color: #167CF1;
+;
+}
 .status-dot-blue {
   width: 6px;
   height: 6px;
@@ -256,9 +293,25 @@
   flex-shrink: 0;
 }
 
+.status-dot-green {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10B981;
+  flex-shrink: 0;
+}
+
+.status-dot-red {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #EF4444;
+  flex-shrink: 0;
+}
+
 /* Not Assigned */
 .not-assigned {
-  color: #EF4444;
+  color: #8A1111;
   font-weight: 500;
 }
 
@@ -310,7 +363,7 @@
   border-radius: 8px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   z-index: 1000;
-  min-width: 180px;
+  min-width: 167px;
   overflow: hidden;
 }
 
@@ -323,7 +376,7 @@
   text-align: left;
   border: none;
   background: white;
-  color: #333;
+font-weight: 500;
   font-size: 14px;
   cursor: pointer;
   transition: background-color 0.2s;
@@ -366,8 +419,11 @@
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.5);
+ 
+
   z-index: 1000;
-  backdrop-filter: blur(2px);
+ backdrop-filter: blur(15px);
+  background: #0A091F38;
 }
 
 .activate-modal {
@@ -388,15 +444,15 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 24px;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 22px 27px;
+      border-bottom: 1px solid #00000020;
 }
 
 .activate-modal-title {
   margin: 0;
   font-size: 20px;
-  font-weight: 600;
-  color: #333;
+  font-weight: 500;
+  
 }
 
 .activate-modal-close {
@@ -418,19 +474,21 @@
 }
 
 .activate-modal-body {
-  padding: 24px;
+  padding: 23px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  padding-top: 25px;
+  padding-bottom: 29px;
 }
 
 .activate-modal-input {
   width: 100%;
-  padding: 12px 16px;
+  padding: 16px 14px;
   border: 1px solid #d1d5db;
   border-radius: 8px;
-  font-size: 14px;
-  color: #333;
+  font-size: 18px;
+ color: #262E84;
   transition: border-color 0.2s;
 }
 
@@ -440,22 +498,26 @@
 }
 
 .activate-modal-input::placeholder {
-  color: #9ca3af;
+  color: #262E84;
+  font-size: 18px;
 }
 
 .activate-modal-submit {
   width: 100%;
-  padding: 12px 24px;
+  padding: 20px 24px;
   background: #262E84;
   color: white;
   border: none;
   border-radius: 8px;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   transition: background-color 0.2s;
 }
-
+.licenses-filter-tabs {
+    display: flex;
+    justify-content: space-between;
+}
 .activate-modal-submit:hover {
   background: #1e2566;
 }

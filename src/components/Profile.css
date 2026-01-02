@@ -6,7 +6,8 @@
 .profile-card {
   background: white;
   border-radius: 10px;
-  padding: 24px;
+  padding: 36px 37px;
+  padding-bottom: 31px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
@@ -52,7 +53,7 @@
 
 .profile-content {
   display: flex;
-  gap: 24px;
+  gap: 25px;
   margin-bottom: 24px;
 }
 
@@ -74,33 +75,37 @@
 }
 
 .profile-detail-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #666;
+  font-size: 17px;
+ 
+  opacity: 0.7;
   min-width: 100px;
 }
 
 .profile-detail-value {
-  font-size: 14px;
-  font-weight: 500;
-  color: #333;
-}
+  font-size: 17px;
+  font-weight: 600;
 
+}
+button.profile-logout-btn {
+    margin-left: 97px;
+}
 .profile-actions {
   display: flex;
   gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid #e5e7eb;
+  padding-top: 7px;
+  
 }
-
+button{
+  font-family: 'DM Sans', sans-serif;
+}
 .profile-logout-btn {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 20px;
-  border: 1px solid #3B82F6;
+  padding: 11.5px 20px;
+  border: 1px solid #262E84;
   background: white;
-  color: #3B82F6;
+  color: #262E84;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;

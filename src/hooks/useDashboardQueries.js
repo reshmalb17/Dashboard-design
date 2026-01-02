@@ -1,14 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDashboard, getLicenses, addSite, removeSite } from '../services/api';
-import { mockDashboardData, mockLicensesData, mockApiDelay } from '../data/mockData';
-
-// Use real API data
-const USE_MOCK_DATA = false;
+// import { getUserProfile } from '../services/api'; // COMMENTED OUT: Profile API endpoint doesn't exist yet
 
 // Query keys
 export const queryKeys = {
   dashboard: (email) => ['dashboard', email],
   licenses: (email) => ['licenses', email],
+  profile: (email) => ['profile', email],
 };
 
 /**
@@ -18,26 +16,28 @@ export function useDashboardData(userEmail, options = {}) {
   return useQuery({
     queryKey: queryKeys.dashboard(userEmail),
     queryFn: async () => {
-      if (USE_MOCK_DATA) {
-        await mockApiDelay(300); // Simulate network delay
-        console.log('[Mock] Returning mock dashboard data');
-        return mockDashboardData;
-      }
-      console.log('[useDashboardData] Fetching real dashboard data for:', userEmail);
+      // This function is ONLY called when data doesn't exist in cache
+      // With staleTime: Infinity, cached data will be used automatically
+      console.log('[useDashboardData] 📡 Fetching dashboard data from server (first load only):', userEmail);
       const data = await getDashboard(userEmail);
-      console.log('[useDashboardData] ✅ Dashboard data received:', {
+      console.log('[useDashboardData] ✅ Dashboard data received from server:', {
         hasSites: !!data.sites,
         sitesCount: data.sites ? Object.keys(data.sites).length : 0,
         hasSubscriptions: !!data.subscriptions
       });
       return data;
     },
-    enabled: (USE_MOCK_DATA || !!userEmail) && !options.disabled,
-    staleTime: 300000, // 5 minutes - data is considered fresh for 5 minutes
-    gcTime: 600000, // Keep in cache for 10 minutes even when not in use
+    enabled: !!userEmail && !options.disabled,
+    // Data is considered fresh forever - will use cache and NOT refetch from server
+    staleTime: Infinity, // Never consider data stale - use cached data forever
+    gcTime: 24 * 60 * 60 * 1000, // Keep in cache for 24 hours
     retry: 2, // Retry on failure
-    refetchOnMount: false, // Don't refetch on mount if data is fresh (use cached data)
-    refetchOnWindowFocus: false, // Don't refetch on window focus
+    // Never refetch - always use cached data if available
+    refetchOnMount: false, // Use cached data, don't refetch
+    refetchOnWindowFocus: false, // Use cached data, don't refetch
+    refetchOnReconnect: false, // Use cached data, don't refetch
+    refetchInterval: false, // Disable automatic refetching
+    // Only fetch if data doesn't exist in cache
     ...options,
   });
 }
@@ -49,25 +49,27 @@ export function useLicenses(userEmail, options = {}) {
   return useQuery({
     queryKey: queryKeys.licenses(userEmail),
     queryFn: async () => {
-      if (USE_MOCK_DATA) {
-        await mockApiDelay(300); // Simulate network delay
-        console.log('[Mock] Returning mock licenses data');
-        return mockLicensesData;
-      }
-      console.log('[useLicenses] Fetching real licenses data for:', userEmail);
+      // This function is ONLY called when data doesn't exist in cache
+      // With staleTime: Infinity, cached data will be used automatically
+      console.log('[useLicenses] 📡 Fetching licenses data from server (first load only):', userEmail);
       const data = await getLicenses(userEmail);
-      console.log('[useLicenses] ✅ Licenses data received:', {
+      console.log('[useLicenses] ✅ Licenses data received from server:', {
         hasLicenses: !!data.licenses,
         licensesCount: data.licenses ? data.licenses.length : 0
       });
       return data;
     },
-    enabled: (USE_MOCK_DATA || !!userEmail) && !options.disabled,
-    staleTime: 300000, // 5 minutes - data is considered fresh for 5 minutes
-    gcTime: 600000, // Keep in cache for 10 minutes even when not in use
+    enabled: !!userEmail && !options.disabled,
+    // Data is considered fresh forever - will use cache and NOT refetch from server
+    staleTime: Infinity, // Never consider data stale - use cached data forever
+    gcTime: 24 * 60 * 60 * 1000, // Keep in cache for 24 hours
     retry: 2, // Retry on failure
-    refetchOnMount: false, // Don't refetch on mount if data is fresh (use cached data)
-    refetchOnWindowFocus: false, // Don't refetch on window focus
+    // Never refetch - always use cached data if available
+    refetchOnMount: false, // Use cached data, don't refetch
+    refetchOnWindowFocus: false, // Use cached data, don't refetch
+    refetchOnReconnect: false, // Use cached data, don't refetch
+    refetchInterval: false, // Disable automatic refetching
+    // Only fetch if data doesn't exist in cache
     ...options,
   });
 }
@@ -165,6 +167,40 @@ export function useRemoveSite(userEmail) {
 }
 
 /**
+ * Hook to fetch user profile data from database
+ * COMMENTED OUT: Profile API endpoint doesn't exist yet
+ */
+/*
+export function useUserProfile(userEmail, options = {}) {
+  return useQuery({
+    queryKey: queryKeys.profile(userEmail),
+    queryFn: async () => {
+      // This function is ONLY called when data doesn't exist in cache
+      console.log('[useUserProfile] 📡 Fetching user profile from database (first load only):', userEmail);
+      const data = await getUserProfile(userEmail);
+      console.log('[useUserProfile] ✅ Profile data received from database:', {
+        hasName: !!data.name,
+        hasEmail: !!data.email,
+        hasPlan: !!data.plan
+      });
+      return data;
+    },
+    enabled: !!userEmail && !options.disabled,
+    // Data is considered fresh forever - will use cache and NOT refetch from server
+    staleTime: Infinity, // Never consider data stale - use cached data forever
+    gcTime: 24 * 60 * 60 * 1000, // Keep in cache for 24 hours
+    retry: 2, // Retry on failure
+    // Never refetch - always use cached data if available
+    refetchOnMount: false, // Use cached data, don't refetch
+    refetchOnWindowFocus: false, // Use cached data, don't refetch
+    refetchOnReconnect: false, // Use cached data, don't refetch
+    refetchInterval: false, // Disable automatic refetching
+    ...options,
+  });
+}
+*/
+
+/**
  * Hook to refresh all dashboard data
  */
 export function useRefreshDashboard(userEmail) {
@@ -173,6 +209,7 @@ export function useRefreshDashboard(userEmail) {
   return () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(userEmail) });
     queryClient.invalidateQueries({ queryKey: queryKeys.licenses(userEmail) });
+    // queryClient.invalidateQueries({ queryKey: queryKeys.profile(userEmail) }); // COMMENTED OUT: Profile API doesn't exist yet
   };
 }
 

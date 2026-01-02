@@ -70,7 +70,7 @@ export default function AddDomainModal({ isOpen, onClose }) {
             title="Close"
           >
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M15 5L5 15M5 5L15 15" stroke="#666" strokeWidth="2" strokeLinecap="round"/>
+              <path d="M15 5L5 15M5 5L15 15" stroke="#000" strokeWidth="2" strokeLinecap="round"/>
             </svg>
           </button>
         </div>
@@ -95,9 +95,11 @@ export default function AddDomainModal({ isOpen, onClose }) {
                       title="Add another domain"
                       type="button"
                     >
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M8 4V12M4 8H12" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-                      </svg>
+                      <svg width="50" height="50" viewBox="0 0 50 50" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="50" height="50" rx="6" fill="#262E84"/>
+<path d="M23.6205 31.8509V18.1489H26.3485V31.8509H23.6205ZM17.7615 26.3019V23.6979H32.2385V26.3019H17.7615Z" fill="#F4F6F8"/>
+</svg>
+
                     </button>
                   ) : (
                     <button
@@ -106,19 +108,30 @@ export default function AddDomainModal({ isOpen, onClose }) {
                       title={confirmedDomains.has(index) ? 'Confirmed' : 'Confirm domain'}
                       type="button"
                     >
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M13 4L6 11L3 8" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
+                    <svg width="50" height="50" viewBox="0 0 50 50" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="50" height="50" rx="6" fill="#69B4FF"/>
+<path d="M31.6281 20.919C32.0013 20.5768 32.5557 20.6115 32.8661 20.9966C33.1765 21.3816 33.1257 21.9715 32.7525 22.3137L24.5464 29.8374C23.494 30.8022 21.9463 30.7751 20.9842 29.7757L17.8384 26.5071C17.4975 26.1527 17.5011 25.5632 17.8463 25.1894C18.1916 24.8158 18.7473 24.8004 19.0884 25.1547L22.2347 28.4215C22.5553 28.7546 23.0711 28.7641 23.4219 28.4427L31.6281 20.919Z" fill="white"/>
+</svg>
+
                     </button>
                   )}
                 </div>
               ))}
             </div>
+             <div className="add-domain-modal-footer">
+          <button
+            className="add-domain-pay-btn"
+            onClick={handlePayNow}
+          >
+            Pay Now
+          </button>
+        </div>
           </div>
 
           <div className="add-domain-modal-right">
+            <div className="add-domain-modal-right-card">
             <label className="add-domain-label">Cost</label>
-            <div className="add-domain-price">${totalPrice}</div>
+            <div className="purchase-price">${totalPrice}</div>
             <div className="add-domain-billing-options">
               <label className="billing-option">
                 <input
@@ -146,15 +159,8 @@ export default function AddDomainModal({ isOpen, onClose }) {
             </div>
           </div>
         </div>
-
-        <div className="add-domain-modal-footer">
-          <button
-            className="add-domain-pay-btn"
-            onClick={handlePayNow}
-          >
-            Pay Now
-          </button>
-        </div>
+</div>
+       
       </div>
     </>
   );

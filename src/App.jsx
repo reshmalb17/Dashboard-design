@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { useMemberstack } from './hooks/useMemberstack';
@@ -141,10 +141,15 @@ function DashboardContent() {
   // Use data from queries - these will persist in cache even after refresh
   // TanStack Query automatically handles caching and persistence
   // Important: Use nullish coalescing to preserve data structure
-  const sites = dashboardData?.sites ?? {};
-  const licenses = licensesData?.licenses ?? [];
+  // Use useMemo to prevent unnecessary recalculations during loading
+  const sites = useMemo(() => dashboardData?.sites ?? {}, [dashboardData?.sites]);
+  const licenses = useMemo(() => licensesData?.licenses ?? [], [licensesData?.licenses]);
   // Subscriptions can be object or array - preserve the structure from API
-  const subscriptions = dashboardData?.subscriptions ?? (Array.isArray(dashboardData?.subscriptions) ? [] : {});
+  const subscriptions = useMemo(() => {
+    const subs = dashboardData?.subscriptions;
+    if (!subs) return Array.isArray(subs) ? [] : {};
+    return subs;
+  }, [dashboardData?.subscriptions]);
   
   // Debug: Log data persistence
   useEffect(() => {
@@ -247,7 +252,7 @@ function DashboardContent() {
                 onClick={() => setPurchaseModalOpen(true)}
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M8 3V13M3 8H13" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round"/>
+                  <path d="M8 3V13M3 8H13" stroke="#262E84" strokeWidth="2" strokeLinecap="round"/>
                 </svg>
                 <span>Purchase License Key</span>
               </button>
@@ -327,7 +332,7 @@ function DashboardContent() {
                 />
               )}
               {activeSection === 'domains' && (
-                <Sites sites={sites} userEmail={userEmail} />
+                <Sites sites={sites} subscriptions={subscriptions} licenses={licenses} userEmail={userEmail} />
               )}
               {activeSection === 'licenses' && (
                 <Licenses licenses={licenses} />
