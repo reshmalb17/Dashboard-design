@@ -28,7 +28,13 @@ function DashboardContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
   const [addDomainModalOpen, setAddDomainModalOpen] = useState(false);
+const [hasCheckedAuthOnce, setHasCheckedAuthOnce] = useState(false);
 
+useEffect(() => {
+  if (!authLoading) {
+    setHasCheckedAuthOnce(true);
+  }
+}, [authLoading]);
   // Debug: Log authentication state
   useEffect(() => {
     console.log('[App] Authentication state:', {
@@ -147,7 +153,7 @@ function DashboardContent() {
   }
 
   // Show loading state only briefly (optimized for fast loading)
-  if (authLoading && !maxTimeoutReached) {
+  if (!hasCheckedAuthOnce &&authLoading && !maxTimeoutReached) {
     return (
       <div className="login-container">
         <div className="card">

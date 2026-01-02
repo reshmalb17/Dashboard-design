@@ -32,7 +32,7 @@
   border-radius: 12px;
   padding: 20px;
   position: relative;
-  overflow: visible;
+  overflow: hidden;
   min-height: 120px;
   display: flex;
   flex-direction: column;
@@ -174,7 +174,7 @@ border: 1px solid #8B77F94D
   text-align: right;
 }
 .stat-background-icon img {
-  width: 100%;
+  width: auto;
   height: 100%;
   
 }
@@ -267,7 +267,7 @@ border: 1px solid #8B77F94D
   text-align: left;
   font-size: 14px;
   font-weight: 600;
-  color: #666;
+  
   border-bottom: 1px solid #e5e7eb;
 }
 
