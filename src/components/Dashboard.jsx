@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import "./Dashboard.css";
-import total from '../assets/total.svg';
+import total from '../assets/wff.png';
 import webflow from '../assets/webflow.png';
 import Framer from '../assets/Framer.png';
 import www from '../assets/WWW.png';
@@ -241,7 +241,7 @@ export default function Dashboard() {
             <thead>
               <tr>
                 <th>Active</th>
-                <th>Source</th>
+                {/* <th>Source</th> */}
                 <th>Status</th>
                 <th>Billing Period</th>
                 <th>Expiration Date</th>
@@ -253,7 +253,7 @@ export default function Dashboard() {
             <tbody>
               {mockRecentDomains.map((domain) => (
                 <tr key={domain.id}>
-                  <td>
+                  <td className="black">
                     {/* <div
                       className={`active-indicator ${
                         domain.active ? "active" : "inactive"
@@ -261,7 +261,7 @@ export default function Dashboard() {
                     ></div> */}
                     {domain.domain}
                   </td>
-                  <td>
+                  {/* <td>
                     <span
                       className={`source-tag ${domain.source
                         .toLowerCase()
@@ -269,7 +269,7 @@ export default function Dashboard() {
                     >
                       {domain.source}
                     </span>
-                  </td>
+                  </td> */}
                   <td>
                     <span
                       className="status-tag"

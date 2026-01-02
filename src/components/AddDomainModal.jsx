@@ -81,6 +81,7 @@ export default function AddDomainModal({ isOpen, onClose }) {
             <div className="domain-inputs-list">
               {domains.map((domain, index) => (
                 <div key={index} className="domain-input-row">
+                  <div className="domain-input-wrapper">
                   <input
                     type="text"
                     className="domain-input"
@@ -115,6 +116,23 @@ export default function AddDomainModal({ isOpen, onClose }) {
 
                     </button>
                   )}
+                </div>
+                <button
+                  className="domain-remove-btn"
+                  onClick={() => {
+                    const newDomains = domains.filter((_, i) => i !== index);
+                    setDomains(newDomains);
+                  }}
+                  style={{border:"none", cursor:"pointer",background:"transparent"}}
+                  title="Remove domain"
+                  type="button"
+                >
+                <svg width="31" height="31" viewBox="0 0 31 31" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect x="0.5" y="0.5" width="30" height="30" rx="5.5" stroke="#717171"/>
+<path d="M21 11L11 21" stroke="#717171" stroke-linecap="round"/>
+<path d="M11 11L21 21" stroke="#717171" stroke-linecap="round"/>
+</svg>
+</button>
                 </div>
               ))}
             </div>

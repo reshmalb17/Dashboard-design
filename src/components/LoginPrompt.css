@@ -214,6 +214,7 @@
 /* Inbox Message */
 .login-inbox-message {
   margin-top: 16px;
+  padding: 0;
   font-size: 14px;
   color: #262E84;
   text-align: center;

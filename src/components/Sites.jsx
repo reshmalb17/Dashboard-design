@@ -110,7 +110,7 @@ function StatusDropdown({ value, onChange }) {
       </button>
       {isOpen && (
         <div className="status-dropdown-menu">
-          <button
+          {/* <button
             className="status-dropdown-option"
             onClick={() => {
               onChange("");
@@ -118,8 +118,8 @@ function StatusDropdown({ value, onChange }) {
             }}
           >
             Status
-          </button>
-          <div className="status-dropdown-separator" />
+          </button> */}
+          {/* <div className="status-dropdown-separator" /> */}
           {statusOptions.map((option) => (
             <button
               key={option.value}
@@ -132,10 +132,14 @@ function StatusDropdown({ value, onChange }) {
               }}
             >
               <span
+      className={`status-pill status-pill-${option.value.toLowerCase()}`}
+    >
+              <span
                 className="status-dropdown-dot"
                 style={{ backgroundColor: option.color }}
               />
               <span>{option.label}</span>
+              </span>
             </button>
           ))}
         </div>
@@ -185,18 +189,42 @@ export default function Sites({ sites, userEmail }) {
     }));
   };
 
-  const handleContextMenu = (e, domainId) => {
-    e.preventDefault();
-    e.stopPropagation();
+const MENU_WIDTH = 180;
+const MENU_HEIGHT = 120; // approx height (2 items)
 
-    const rect = e.currentTarget.getBoundingClientRect();
+const handleContextMenu = (e, domainId) => {
+  e.preventDefault();
+  e.stopPropagation();
 
-    setContextMenu({
-      domainId,
-      top: rect.bottom + 6, // below button
-      left: rect.left - 180, // open to the left
-    });
-  };
+  const rect = e.currentTarget.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  let top = rect.bottom + 6; // default: below
+  let left = rect.right - MENU_WIDTH; // default: align left
+
+  // 🔼 If menu goes out at bottom → open upwards
+  if (top + MENU_HEIGHT > viewportHeight) {
+    top = rect.top - MENU_HEIGHT - 6;
+  }
+
+  // ◀️ If menu goes out on right → shift left
+  if (left + MENU_WIDTH > viewportWidth) {
+    left = viewportWidth - MENU_WIDTH - 8;
+  }
+
+  // ▶️ If menu goes out on left
+  if (left < 8) {
+    left = 8;
+  }
+
+  setContextMenu({
+    domainId,
+    top,
+    left,
+  });
+};
+
 
   const handleCopyLicenseKey = (licenseKey) => {
     navigator.clipboard.writeText(licenseKey);
@@ -322,7 +350,7 @@ export default function Sites({ sites, userEmail }) {
 
       {/* Filters */}
       <div className="domains-filters">
-        <select
+        {/* <select
           className="domains-filter-select"
           value={filters.source}
           onChange={(e) =>
@@ -332,7 +360,7 @@ export default function Sites({ sites, userEmail }) {
           <option value="">Source</option>
           <option value="Direct payment">Direct payment</option>
           <option value="License Key">License Key</option>
-        </select>
+        </select> */}
 
         <StatusDropdown
           value={filters.status}
@@ -406,7 +434,7 @@ export default function Sites({ sites, userEmail }) {
           <thead>
             <tr>
               <th>Active</th>
-              <th>Source</th>
+              
               <th>Status</th>
               <th>Billing Period</th>
               <th>Expiration Date</th>
@@ -421,7 +449,7 @@ export default function Sites({ sites, userEmail }) {
                 <td>
                   <div className="domain-cell-content">{domain.domain}</div>
                 </td>
-                <td>
+                {/* <td>
                   <div className="domain-cell-content">
                     <span
                       className={`source-tag source-tag-${
@@ -433,7 +461,7 @@ export default function Sites({ sites, userEmail }) {
                       {domain.source}
                     </span>
                   </div>
-                </td>
+                </td> */}
                 <td>
                   <div className="domain-cell-content">
                     <span className="status-tag status-tag-active">
