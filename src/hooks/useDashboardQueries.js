@@ -18,13 +18,7 @@ export function useDashboardData(userEmail, options = {}) {
     queryFn: async () => {
       // This function is ONLY called when data doesn't exist in cache
       // With staleTime: Infinity, cached data will be used automatically
-      console.log('[useDashboardData] 📡 Fetching dashboard data from server (first load only):', userEmail);
       const data = await getDashboard(userEmail);
-      console.log('[useDashboardData] ✅ Dashboard data received from server:', {
-        hasSites: !!data.sites,
-        sitesCount: data.sites ? Object.keys(data.sites).length : 0,
-        hasSubscriptions: !!data.subscriptions
-      });
       return data;
     },
     enabled: !!userEmail && !options.disabled,
@@ -51,12 +45,7 @@ export function useLicenses(userEmail, options = {}) {
     queryFn: async () => {
       // This function is ONLY called when data doesn't exist in cache
       // With staleTime: Infinity, cached data will be used automatically
-      console.log('[useLicenses] 📡 Fetching licenses data from server (first load only):', userEmail);
       const data = await getLicenses(userEmail);
-      console.log('[useLicenses] ✅ Licenses data received from server:', {
-        hasLicenses: !!data.licenses,
-        licensesCount: data.licenses ? data.licenses.length : 0
-      });
       return data;
     },
     enabled: !!userEmail && !options.disabled,

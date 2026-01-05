@@ -6,6 +6,7 @@
 // Using existing server - same as consentbit-dashboard-1
 const API_BASE = import.meta.env.VITE_API_BASE || 'https://consentbit-dashboard-test.web-8fb.workers.dev';
 
+
 // Request timeout (30 seconds for dashboard, 10 seconds for others)
 // Dashboard API can take longer due to data processing
 const REQUEST_TIMEOUT = 30000; // 30 seconds
@@ -165,13 +166,6 @@ export async function getLicenses(userEmail) {
         }),
         createTimeoutPromise(REQUEST_TIMEOUT)
       ]);
-      
-      console.log('[API] Licenses response status:', {
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok,
-        url: response.url
-      });
     } catch (error) {
       if (error.message === 'Request timeout') {
         throw new Error('Request timeout - server took too long to respond');
@@ -223,6 +217,86 @@ export async function addSite(userEmail, site, price) {
     }),
   });
 }
+export async function activateLicense(licenseKey, siteDomain, email = null) {
+  const body = {
+    license_key: licenseKey,
+    site_domain: siteDomain
+  };
+
+  if (email) {
+    body.email = email;
+  }
+ const url = `${API_BASE}/activate-license`;
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      credentials: 'include'
+    });
+
+    let data;
+
+    // Try parsing JSON safely
+    const text = await response.text();
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (jsonErr) {
+      console.error('Failed to parse JSON response:', text);
+      data = { error: 'invalid_response', message: 'Server returned invalid JSON' };
+    }
+
+    if (!response.ok) {
+      console.error('License activation failed:', data);
+      return data;
+    }
+
+    console.log('License activated successfully:', data);
+    return data;
+
+  } catch (err) {
+    console.error('Error activating license:', err);
+    return { error: 'network_error', message: err.message };
+  }
+}
+
+export async function cancelSubscription(email = null, site = null, subscriptionId = null) {
+  try {
+    const body = { site };
+    site = site.toLowerCase().trim()
+
+
+    if (subscriptionId) body.subscription_id = subscriptionId;
+    if (email) body.email = email;
+ const url = `${API_BASE}/remove-site`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Include auth headers if needed, e.g., JWT token
+        // 'Authorization': 'Bearer <token>'
+      },
+      body: JSON.stringify(body),
+      credentials: 'include' // Include cookies if using session cookie auth
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('Failed to remove site:', data);
+      return data;
+    }
+
+    console.log('Site removed successfully:', data);
+    return data;
+
+  } catch (error) {
+    console.error('Error calling remove-site:', error);
+    return { error: 'network_error', message: error.message };
+  }
+}
+
+
 
 // Remove a site
 export async function removeSite(userEmail, site) {
@@ -236,16 +310,18 @@ export async function removeSite(userEmail, site) {
 }
 
 // Add sites in batch (for pending sites)
-export async function addSitesBatch(userEmail, sites, billingPeriod) {
-  return apiRequest('/add-sites-batch', {
+export async function createSiteCheckout(email, sites, billingPeriod) {
+  console.log('Creating site checkout with:', { email, sites, billingPeriod });
+  return apiRequest('/create-site-checkout', {
     method: 'POST',
-    body: JSON.stringify({ 
-      sites: sites.map(site => ({ site: typeof site === 'string' ? site : site.site || site.site_domain })),
-      email: userEmail,
-      billing_period: billingPeriod
+    body: JSON.stringify({
+      email,
+      sites,               // ['a.com', 'b.com']
+      billing_period: billingPeriod, // 'monthly' | 'yearly'
     }),
   });
 }
+
 
 // Create checkout from pending sites
 export async function createCheckoutFromPending(userEmail, billingPeriod) {
@@ -269,14 +345,26 @@ export async function removePendingSite(userEmail, site) {
   });
 }
 
-// Cancel subscription (uses /remove-site endpoint)
-export async function cancelSubscription(userEmail, site, subscriptionId) {
-  return apiRequest('/remove-site', {
+// // Cancel subscription (uses /remove-site endpoint)
+// export async function cancelSubscription(userEmail, site, subscriptionId) {
+//   return apiRequest('/remove-site', {
+//     method: 'POST',
+//     body: JSON.stringify({ 
+//       email: userEmail,
+//       site: site,
+//       subscription_id: subscriptionId
+//     }),
+//   });
+// }
+
+// Purchase quantity of license keys
+export async function purchaseQuantity(userEmail, quantity, billingPeriod) {
+  return apiRequest('/purchase-quantity', {
     method: 'POST',
-    body: JSON.stringify({ 
+    body: JSON.stringify({
       email: userEmail,
-      site: site,
-      subscription_id: subscriptionId
+      quantity: parseInt(quantity),
+      billing_period: billingPeriod.toLowerCase() // 'monthly' or 'yearly'
     }),
   });
 }

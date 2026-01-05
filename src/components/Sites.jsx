@@ -114,7 +114,7 @@ function StatusDropdown({ value, onChange }) {
   );
 }
 
-export default function Sites({ sites, subscriptions = {}, licenses = [], userEmail }) {
+export default function Sites({ sites, subscriptions = {}, licenses = [], userEmail, isPolling = false }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [filters, setFilters] = useState({
@@ -657,7 +657,20 @@ export default function Sites({ sites, subscriptions = {}, licenses = [], userEm
     <div className="domains-container">
       {/* Header */}
       <div className="domains-header">
-        <h1 className="domains-title">Domains</h1>
+        <h1 className="domains-title">
+          Domains
+          {isPolling && (
+            <span style={{ 
+              marginLeft: '10px', 
+              fontSize: '14px', 
+              color: '#666', 
+              fontWeight: 'normal',
+              fontStyle: 'italic'
+            }}>
+              (Processing new domains...)
+            </span>
+          )}
+        </h1>
         <div
           className={`domains-search-wrapper ${
             isSearchExpanded ? "expanded" : ""

@@ -1,16 +1,18 @@
 import { useState } from 'react';
 import { useNotification } from '../hooks/useNotification';
+import {  createSiteCheckout } from '../services/api';
 import './AddDomainModal.css';
 
-export default function AddDomainModal({ isOpen, onClose }) {
-  const [domains, setDomains] = useState(['www.domain.com', 'www.domain.com', 'www.domain.com', 'www.domain.com', 'www.domain.com']);
-  const [confirmedDomains, setConfirmedDomains] = useState(new Set([0, 1, 2, 3])); // First 4 are confirmed
+export default function AddDomainModal({ isOpen, onClose, userEmail }) {
+  const [domains, setDomains] = useState(['']);
+  const [confirmedDomains, setConfirmedDomains] = useState(new Set());
   const [billingCycle, setBillingCycle] = useState('Monthly');
+  const [isProcessing, setIsProcessing] = useState(false);
   const { showSuccess, showError } = useNotification();
 
-  // Pricing (example - adjust based on your pricing structure)
-  const monthlyPrice = 3.4; // per domain
-  const yearlyPrice = 2.72; // per domain (20% discount)
+  // Pricing
+  const monthlyPrice = 8; // per domain
+  const yearlyPrice = 72; // per domain
   
   // Calculate price based on confirmed domains only
   const confirmedCount = confirmedDomains.size;
@@ -25,7 +27,7 @@ export default function AddDomainModal({ isOpen, onClose }) {
   };
 
   const handleAddDomain = () => {
-    setDomains([...domains, 'www.domain.com']);
+    setDomains([...domains, '']);
   };
 
   const handleToggleConfirm = (index) => {
@@ -37,24 +39,49 @@ export default function AddDomainModal({ isOpen, onClose }) {
     }
     setConfirmedDomains(newConfirmed);
   };
+const handlePayNow = async () => {
+  const validDomains = domains
+    .map(d => d.trim())
+    .filter(trimmed => trimmed && trimmed !== 'www.domain.com');
 
-  const handlePayNow = () => {
-    // Validate domains - only count confirmed domains
-    const validDomains = domains.filter((domain, index) => 
-      domain.trim() && 
-      domain !== 'www.domain.com' && 
-      confirmedDomains.has(index)
-    );
-    
-    if (validDomains.length === 0) {
-      showError('Please confirm at least one valid domain');
-      return;
+  console.log('Valid domains for payment:', validDomains);
+
+  if (!validDomains.length) {
+    showError('Please enter at least one valid domain');
+    return;
+  }
+
+  if (!userEmail) {
+    showError('User email not found. Please refresh the page.');
+    return;
+  }
+  console.log('User email:', userEmail);
+
+  setIsProcessing(true);
+
+  try {
+    const billingPeriod = billingCycle.toLowerCase(); // 'monthly' | 'yearly'
+    const sites = validDomains.map(d => d.trim());
+
+    // MISSING BEFORE: actually call your backend
+    const checkoutData = await createSiteCheckout(userEmail, sites, billingPeriod);
+    console.log('Checkout data received:', checkoutData);
+    // or, if you don’t have that wrapper:
+    // const checkoutData = await apiRequest('/create-site-checkout', {
+    //   method: 'POST',
+    //   body: JSON.stringify({ email: userEmail, sites, billing_period: billingPeriod }),
+    // });
+
+    if (checkoutData.url) {
+      window.location.href = checkoutData.url;
+    } else {
+      throw new Error('No checkout URL received');
     }
-
-    // Here you would typically integrate with payment gateway
-    showSuccess(`Processing payment for ${validDomains.length} domain(s) - $${totalPrice}`);
-    onClose();
-  };
+  } catch (err) {
+    showError('Failed to process payment: ' + (err.message || 'Unknown error'));
+    setIsProcessing(false);
+  }
+};
 
   if (!isOpen) return null;
 
@@ -122,8 +149,9 @@ export default function AddDomainModal({ isOpen, onClose }) {
           <button
             className="add-domain-pay-btn"
             onClick={handlePayNow}
+            disabled={isProcessing}
           >
-            Pay Now
+            {isProcessing ? 'Processing...' : 'Pay Now'}
           </button>
         </div>
           </div>

@@ -24,7 +24,7 @@ const sourceColors = {
   "License Key": { bg: "#E9D5FF", text: "#6B21A8" },
 };
 
-export default function Dashboard({ sites = {}, subscriptions = {}, licenses = [] }) {
+export default function Dashboard({ sites = {}, subscriptions = {}, licenses = [], isPolling = false }) {
   const [searchExpanded, setSearchExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef(null);
@@ -479,7 +479,20 @@ export default function Dashboard({ sites = {}, subscriptions = {}, licenses = [
       {/* Recent Domains Table */}
       <div className="recent-domains-section">
         <div className="recent-domains-header">
-          <h3 className="recent-domains-title">Recent domains</h3>
+          <h3 className="recent-domains-title">
+            Recent domains
+            {isPolling && (
+              <span style={{ 
+                marginLeft: '10px', 
+                fontSize: '14px', 
+                color: '#666', 
+                fontWeight: 'normal',
+                fontStyle: 'italic'
+              }}>
+                (Processing new domains...)
+              </span>
+            )}
+          </h3>
           <div
             className={`search-container ${searchExpanded ? "expanded" : ""}`}
           >

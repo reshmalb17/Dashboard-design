@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import './Subscriptions.css';
 import { useNotification } from '../hooks/useNotification';
-import { addSitesBatch, createCheckoutFromPending, removePendingSite } from '../services/api';
+import { createSiteCheckout, removePendingSite } from '../services/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys, useLicenses } from '../hooks/useDashboardQueries';
 
