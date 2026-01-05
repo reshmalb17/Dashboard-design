@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import './Subscriptions.css';
 import { useNotification } from '../hooks/useNotification';
-import { addSitesBatch, createCheckoutFromPending, removePendingSite } from '../services/api';
+import { createSiteCheckout, removePendingSite } from '../services/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys, useLicenses } from '../hooks/useDashboardQueries';
 
@@ -61,6 +61,7 @@ export default function Subscriptions({ dashboardData, userEmail }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [localPendingSites, setLocalPendingSites] = useState([]);
   const [activeSubscriptionTab, setActiveSubscriptionTab] = useState('monthly');
+  const [copiedKey, setCopiedKey] = useState(null);
 
   // Use ref to track previous backendPendingSites to prevent infinite loops
   const prevBackendPendingSitesRef = useRef();
@@ -503,13 +504,14 @@ export default function Subscriptions({ dashboardData, userEmail }) {
                               {item.licenseKey !== 'N/A' && (
                                 <button
                                   className="btn-copy-license"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(item.licenseKey);
-                                    showSuccess('License key copied to clipboard!');
+                                  onClick={() => handleCopyLicenseKey(item.licenseKey)}
+                                  title={copiedKey === item.licenseKey ? "Copied!" : "Copy License Key"}
+                                  style={{
+                                    opacity: copiedKey === item.licenseKey ? 0.6 : 1,
+                                    cursor: 'pointer'
                                   }}
-                                  title="Copy License Key"
                                 >
-                                  📋
+                                  {copiedKey === item.licenseKey ? '✓' : '📋'}
                                 </button>
                               )}
                             </td>
@@ -554,13 +556,14 @@ export default function Subscriptions({ dashboardData, userEmail }) {
                               {item.licenseKey !== 'N/A' && (
                                 <button
                                   className="btn-copy-license"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(item.licenseKey);
-                                    showSuccess('License key copied to clipboard!');
+                                  onClick={() => handleCopyLicenseKey(item.licenseKey)}
+                                  title={copiedKey === item.licenseKey ? "Copied!" : "Copy License Key"}
+                                  style={{
+                                    opacity: copiedKey === item.licenseKey ? 0.6 : 1,
+                                    cursor: 'pointer'
                                   }}
-                                  title="Copy License Key"
                                 >
-                                  📋
+                                  {copiedKey === item.licenseKey ? '✓' : '📋'}
                                 </button>
                               )}
                             </td>

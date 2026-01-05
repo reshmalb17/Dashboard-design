@@ -1,15 +1,19 @@
 import { useState } from 'react';
 import { useNotification } from '../hooks/useNotification';
+import { useMemberstack } from '../hooks/useMemberstack';
+import { purchaseQuantity } from '../services/api';
 import './PurchaseLicenseModal.css';
 
 export default function PurchaseLicenseModal({ isOpen, onClose }) {
-  const [quantity, setQuantity] = useState(10);
+  const [quantity, setQuantity] = useState(1);
   const [billingCycle, setBillingCycle] = useState('Monthly');
+  const [isProcessing, setIsProcessing] = useState(false);
   const { showSuccess, showError } = useNotification();
+  const { userEmail } = useMemberstack();
 
-  // Pricing (example - adjust based on your pricing structure)
-  const monthlyPrice = 3.4; // per license
-  const yearlyPrice = 2.72; // per license (20% discount)
+  // Pricing
+  const monthlyPrice = 8; // per license
+  const yearlyPrice = 72; // per license
   
   const totalPrice = billingCycle === 'Monthly' 
     ? (quantity * monthlyPrice).toFixed(2)
@@ -32,11 +36,56 @@ export default function PurchaseLicenseModal({ isOpen, onClose }) {
     }
   };
 
-  const handlePayNow = () => {
-    // Here you would typically integrate with payment gateway
-    showSuccess(`Processing payment for ${quantity} license key(s) - $${totalPrice}`);
-    onClose();
+  const handlePayNow = async () => {
+    // Validate user is logged in
+    if (!userEmail) {
+      showError('Please log in to purchase license keys');
+      return;
+    }
+
+    // Validate quantity
+    if (quantity < 1) {
+      showError('Please select at least 1 license key');
+      return;
+    }
+
+    // Validate quantity max (backend allows up to 25)
+    if (quantity > 25) {
+      showError('Maximum 25 license keys per purchase');
+      return;
+    }
+
+    setIsProcessing(true);
+
+    try {
+      // Convert billing cycle to lowercase for API
+      const billingPeriod = billingCycle.toLowerCase(); // 'monthly' or 'yearly'
+
+      // Call the purchase-quantity endpoint
+      const response = await purchaseQuantity(userEmail, quantity, billingPeriod);
+
+      // Check if checkout_url is returned
+      if (response && response.checkout_url) {
+        // Store purchase info in sessionStorage for when user returns
+        sessionStorage.setItem('pendingLicensePurchase', JSON.stringify({
+          quantity,
+          billingPeriod: billingCycle.toLowerCase(),
+          timestamp: Date.now()
+        }));
+        
+        // Redirect user to Stripe checkout
+        window.location.href = response.checkout_url;
+      } else {
+        showError('Failed to create checkout session. Please try again.');
+        setIsProcessing(false);
+      }
+    } catch (error) {
+      const errorMessage = error.message || error.error || 'Failed to process purchase. Please try again.';
+      showError(errorMessage);
+      setIsProcessing(false);
+    }
   };
+
 
   if (!isOpen) return null;
 
@@ -95,8 +144,9 @@ export default function PurchaseLicenseModal({ isOpen, onClose }) {
             <button
               className="purchase-pay-btn"
               onClick={handlePayNow}
+              disabled={isProcessing || !userEmail}
             >
-              Pay Now
+              {isProcessing ? 'Processing...' : 'Pay Now'}
             </button>
           </div>
 

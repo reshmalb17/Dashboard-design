@@ -6,8 +6,11 @@
 // Using existing server - same as consentbit-dashboard-1
 const API_BASE = import.meta.env.VITE_API_BASE || 'https://consentbit-dashboard-test.web-8fb.workers.dev';
 
-// Request timeout (5 seconds)
-const REQUEST_TIMEOUT = 5000;
+
+// Request timeout (30 seconds for dashboard, 10 seconds for others)
+// Dashboard API can take longer due to data processing
+const REQUEST_TIMEOUT = 30000; // 30 seconds
+const REQUEST_TIMEOUT_SHORT = 10000; // 10 seconds for faster endpoints
 
 // Helper to create timeout promise
 function createTimeoutPromise(timeout) {
@@ -62,12 +65,6 @@ export async function getDashboard(userEmail) {
     const normalizedEmail = userEmail.toLowerCase().trim();
     
     const url = `${API_BASE}/dashboard?email=${encodeURIComponent(normalizedEmail)}`;
-    console.log('[API] Fetching dashboard data:', {
-      url,
-      userEmail: normalizedEmail,
-      API_BASE,
-      originalEmail: userEmail
-    });
     
     // Try email-based endpoint first (for Memberstack users) with timeout
     let response;
@@ -82,14 +79,6 @@ export async function getDashboard(userEmail) {
         }),
         createTimeoutPromise(REQUEST_TIMEOUT)
       ]);
-      
-      console.log('[API] Dashboard response status:', {
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok,
-        url: response.url,
-        headers: Object.fromEntries(response.headers.entries())
-      });
     } catch (error) {
       if (error.message === 'Request timeout') {
         throw new Error('Request timeout - server took too long to respond');
@@ -126,11 +115,6 @@ export async function getDashboard(userEmail) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[API] ❌ Dashboard response not OK:', {
-        status: response.status,
-        statusText: response.statusText,
-        errorText
-      });
       
       // Handle specific error cases (matching reference dashboard)
       if (response.status === 401) {
@@ -143,21 +127,8 @@ export async function getDashboard(userEmail) {
     }
 
     const data = await response.json();
-    console.log('[API] Dashboard data received:', {
-      hasSites: !!data.sites,
-      sitesCount: data.sites ? Object.keys(data.sites).length : 0,
-      hasSubscriptions: !!data.subscriptions,
-      subscriptionsType: Array.isArray(data.subscriptions) ? 'array' : typeof data.subscriptions,
-      subscriptionsCount: Array.isArray(data.subscriptions) 
-        ? data.subscriptions.length 
-        : data.subscriptions ? Object.keys(data.subscriptions).length : 0,
-      hasPendingSites: !!data.pendingSites,
-      pendingSitesCount: data.pendingSites ? data.pendingSites.length : 0,
-      fullResponse: data
-    });
     return data;
   } catch (error) {
-    console.error('[API] Error loading dashboard:', error);
     throw error;
   }
 }
@@ -195,13 +166,6 @@ export async function getLicenses(userEmail) {
         }),
         createTimeoutPromise(REQUEST_TIMEOUT)
       ]);
-      
-      console.log('[API] Licenses response status:', {
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok,
-        url: response.url
-      });
     } catch (error) {
       if (error.message === 'Request timeout') {
         throw new Error('Request timeout - server took too long to respond');
@@ -232,23 +196,12 @@ export async function getLicenses(userEmail) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[API] Licenses response not OK:', {
-        status: response.status,
-        statusText: response.statusText,
-        errorText
-      });
       throw new Error(`Failed to load licenses: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
-    console.log('[API] Licenses data received:', {
-      hasLicenses: !!data.licenses,
-      licensesCount: data.licenses ? data.licenses.length : 0,
-      fullResponse: data
-    });
     return data;
   } catch (error) {
-    console.error('[API] Error loading licenses:', error);
     throw error;
   }
 }
@@ -264,6 +217,86 @@ export async function addSite(userEmail, site, price) {
     }),
   });
 }
+export async function activateLicense(licenseKey, siteDomain, email = null) {
+  const body = {
+    license_key: licenseKey,
+    site_domain: siteDomain
+  };
+
+  if (email) {
+    body.email = email;
+  }
+ const url = `${API_BASE}/activate-license`;
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      credentials: 'include'
+    });
+
+    let data;
+
+    // Try parsing JSON safely
+    const text = await response.text();
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (jsonErr) {
+      console.error('Failed to parse JSON response:', text);
+      data = { error: 'invalid_response', message: 'Server returned invalid JSON' };
+    }
+
+    if (!response.ok) {
+      console.error('License activation failed:', data);
+      return data;
+    }
+
+    console.log('License activated successfully:', data);
+    return data;
+
+  } catch (err) {
+    console.error('Error activating license:', err);
+    return { error: 'network_error', message: err.message };
+  }
+}
+
+export async function cancelSubscription(email = null, site = null, subscriptionId = null) {
+  try {
+    const body = { site };
+    site = site.toLowerCase().trim()
+
+
+    if (subscriptionId) body.subscription_id = subscriptionId;
+    if (email) body.email = email;
+ const url = `${API_BASE}/remove-site`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Include auth headers if needed, e.g., JWT token
+        // 'Authorization': 'Bearer <token>'
+      },
+      body: JSON.stringify(body),
+      credentials: 'include' // Include cookies if using session cookie auth
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('Failed to remove site:', data);
+      return data;
+    }
+
+    console.log('Site removed successfully:', data);
+    return data;
+
+  } catch (error) {
+    console.error('Error calling remove-site:', error);
+    return { error: 'network_error', message: error.message };
+  }
+}
+
+
 
 // Remove a site
 export async function removeSite(userEmail, site) {
@@ -276,28 +309,38 @@ export async function removeSite(userEmail, site) {
   });
 }
 
-// Add sites in batch (for pending sites)
-export async function addSitesBatch(userEmail, sites, billingPeriod) {
-  return apiRequest('/add-sites-batch', {
-    method: 'POST',
-    body: JSON.stringify({ 
-      sites: sites.map(site => ({ site: typeof site === 'string' ? site : site.site || site.site_domain })),
-      email: userEmail,
-      billing_period: billingPeriod
-    }),
-  });
-}
+// // Add sites in batch (for pending sites)
+// export async function createSiteCheckout(email, sites, billingPeriod) {
+//   console.log('Creating site checkout with:', { email, sites, billingPeriod });
+//   return apiRequest('/create-site-checkout', {
+//     method: 'POST',
+//     body: JSON.stringify({
+//       email,
+//       sites,               // ['a.com', 'b.com']
+//       billing_period: billingPeriod, // 'monthly' | 'yearly'
+//     }),
+//   });
+// }
+
 
 // Create checkout from pending sites
-export async function createCheckoutFromPending(userEmail, billingPeriod) {
-  return apiRequest('/create-checkout-from-pending', {
+export async function createSiteCheckout(email, sites, billingPeriod) {
+  const res = await fetch(`${API_BASE}/create-site-checkout`, {
     method: 'POST',
-    body: JSON.stringify({ 
-      email: userEmail,
-      billing_period: billingPeriod
-    }),
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, sites, billing_period: billingPeriod }),
   });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data?.message || data?.error || 'Checkout failed');
+  }
+
+  return data; // { checkout_url, session_id, ... }
 }
+
 
 // Remove pending site
 export async function removePendingSite(userEmail, site) {
@@ -310,3 +353,109 @@ export async function removePendingSite(userEmail, site) {
   });
 }
 
+// // Cancel subscription (uses /remove-site endpoint)
+// export async function cancelSubscription(userEmail, site, subscriptionId) {
+//   return apiRequest('/remove-site', {
+//     method: 'POST',
+//     body: JSON.stringify({ 
+//       email: userEmail,
+//       site: site,
+//       subscription_id: subscriptionId
+//     }),
+//   });
+// }
+
+// Purchase quantity of license keys
+export async function purchaseQuantity(userEmail, quantity, billingPeriod) {
+  return apiRequest('/purchase-quantity', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: userEmail,
+      quantity: parseInt(quantity),
+      billing_period: billingPeriod.toLowerCase() // 'monthly' or 'yearly'
+    }),
+  });
+}
+
+// Get user profile data from database
+// COMMENTED OUT: Profile API endpoint doesn't exist yet
+/*
+export async function getUserProfile(userEmail) {
+  try {
+    // Validate email before making API call
+    if (!userEmail || !userEmail.includes('@')) {
+      console.error('[API] ❌ Invalid email for profile API call:', userEmail);
+      throw new Error('Invalid email address. Please log out and log in again.');
+    }
+    
+    // Normalize email (lowercase and trim)
+    const normalizedEmail = userEmail.toLowerCase().trim();
+    
+    const url = `${API_BASE}/profile?email=${encodeURIComponent(normalizedEmail)}`;
+    console.log('[API] Fetching user profile:', {
+      url,
+      userEmail: normalizedEmail,
+      API_BASE
+    });
+    
+    // Try profile endpoint first
+    let response;
+    try {
+      response = await Promise.race([
+        fetch(url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include'
+        }),
+        createTimeoutPromise(REQUEST_TIMEOUT_SHORT)
+      ]);
+    } catch (error) {
+      if (error.message === 'Request timeout') {
+        throw new Error('Request timeout - server took too long to respond');
+      }
+      throw error;
+    }
+
+    // If profile endpoint doesn't exist (404), try getting user data from dashboard endpoint
+    if (!response.ok && response.status === 404) {
+      console.log('[API] Profile endpoint not found, trying dashboard endpoint for user data...');
+      const dashboardData = await getDashboard(userEmail);
+      // Extract user info from dashboard response if available
+      if (dashboardData.user) {
+        return dashboardData.user;
+      }
+      // Fallback: return basic info from email
+      return {
+        email: normalizedEmail,
+        name: normalizedEmail.split('@')[0],
+        plan: dashboardData.plan || 'N/A',
+        created_at: dashboardData.created_at || null,
+      };
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[API] Profile response not OK:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorText
+      });
+      throw new Error(`Failed to load profile: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log('[API] Profile data received:', {
+      hasName: !!data.name,
+      hasEmail: !!data.email,
+      hasPlan: !!data.plan,
+      fullResponse: data
+    });
+    return data;
+  } catch (error) {
+    console.error('[API] Error loading profile:', error);
+    throw error;
+  }
+}
+*/

@@ -1,19 +1,23 @@
 import { QueryClient } from '@tanstack/react-query';
 
-// Create a query client with optimized defaults for fast loading
+// Create a query client with optimized defaults for persistent caching
+// Data will be cached and reused - only refetch when explicitly invalidated
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // Cache data for 5 minutes (longer cache = less refetching)
-      staleTime: 300000,
-      // Keep data in cache for 10 minutes
-      gcTime: 600000,
+      // Data is considered fresh forever (until explicitly invalidated)
+      // This means once loaded, it will use cached data and NOT refetch from server
+      staleTime: Infinity, // Never consider data stale - use cache forever
+      // Keep data in cache for 24 hours (very long cache retention)
+      gcTime: 24 * 60 * 60 * 1000, // 24 hours
       // Reduce retries for faster failure feedback
       retry: 1,
-      // Disable refetch on window focus for faster UX
+      // Disable refetch on window focus - use cached data
       refetchOnWindowFocus: false,
-      // Keep refetch on reconnect
-      refetchOnReconnect: true,
+      // Disable refetch on reconnect - use cached data
+      refetchOnReconnect: false,
+      // Never refetch on mount - always use cached data if available
+      refetchOnMount: false,
       // Network mode for faster queries
       networkMode: 'online',
     },

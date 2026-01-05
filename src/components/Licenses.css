@@ -256,6 +256,31 @@ border-radius: 50px;
  background: #0777E61A;
 
 }
+
+.license-status-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #065F46;
+  border-radius: 50px;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 6px 8px;
+  background: #D1FAE5;
+}
+
+.license-status-cancelled {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #991B1B;
+  border-radius: 50px;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 6px 8px;
+  background: #FEE2E2;
+}
+
 .license-cell-content.billing-yearly {
     color: #524693;
 }
@@ -268,6 +293,22 @@ border-radius: 50px;
   height: 6px;
   border-radius: 50%;
   background: #3B82F6;
+  flex-shrink: 0;
+}
+
+.status-dot-green {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10B981;
+  flex-shrink: 0;
+}
+
+.status-dot-red {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #EF4444;
   flex-shrink: 0;
 }
 
@@ -491,8 +532,7 @@ font-weight: 500;
 /* Responsive */
 @media (max-width: 768px) {
   .licenses-header {
-    flex-direction: column;
-    align-items: flex-start;
+   
     gap: 16px;
   }
 

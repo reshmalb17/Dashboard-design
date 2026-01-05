@@ -1,66 +1,13 @@
+// Your imports remain the same
 import { useState, useRef, useEffect } from 'react';
 import { useNotification } from '../hooks/useNotification';
+import { cancelSubscription, activateLicense } from '../services/api';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../hooks/useDashboardQueries';
+import { useMemberstack } from '../hooks/useMemberstack';
 import './Licenses.css';
 
-// Mock license keys data for design
-const mockLicenses = [
-  {
-    id: '1',
-    licenseKey: 'KEY-GN5B-PUHB-7NLK',
-    status: 'Available',
-    billingPeriod: 'Yearly',
-    activatedForSite: 'Not Assigned',
-    createdDate: '12/12/26',
-    expiryDate: '12/12/26',
-  },
-  {
-    id: '2',
-    licenseKey: 'KEY-GN5B-PUHB-7NLK',
-    status: 'Available',
-    billingPeriod: 'Monthly',
-    activatedForSite: 'Not Assigned',
-    createdDate: '12/12/26',
-    expiryDate: '12/12/26',
-  },
-  {
-    id: '3',
-    licenseKey: 'KEY-GN5B-PUHB-7NLK',
-    status: 'Available',
-    billingPeriod: 'Yearly',
-    activatedForSite: 'Not Assigned',
-    createdDate: '12/12/26',
-    expiryDate: '12/12/26',
-  },
-  {
-    id: '4',
-    licenseKey: 'KEY-GN5B-PUHB-7NLK',
-    status: 'Available',
-    billingPeriod: 'Yearly',
-    activatedForSite: 'Not Assigned',
-    createdDate: '12/12/26',
-    expiryDate: '12/12/26',
-  },
-  {
-    id: '5',
-    licenseKey: 'KEY-GN5B-PUHB-7NLK',
-    status: 'Available',
-    billingPeriod: 'Yearly',
-    activatedForSite: 'Not Assigned',
-    createdDate: '12/12/26',
-    expiryDate: '12/12/26',
-  },
-  {
-    id: '6',
-    licenseKey: 'KEY-GN5B-PUHB-7NLK',
-    status: 'Available',
-    billingPeriod: 'Yearly',
-    activatedForSite: 'Not Assigned',
-    createdDate: '12/12/26',
-    expiryDate: '12/12/26',
-  },
-];
-
-export default function Licenses({ licenses }) {
+export default function Licenses({ licenses, isPolling = false }) {
   const [activeTab, setActiveTab] = useState('Not Assigned');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
@@ -68,22 +15,58 @@ export default function Licenses({ licenses }) {
   const [contextMenu, setContextMenu] = useState(null);
   const [activateModal, setActivateModal] = useState(null);
   const [domainInput, setDomainInput] = useState('');
+  const [copiedKey, setCopiedKey] = useState(null);
+  const [isCancelling, setIsCancelling] = useState(false);
   const contextMenuRef = useRef(null);
   const searchInputRef = useRef(null);
   const { showSuccess, showError } = useNotification();
-console.log(licenses,"haaa");
-  // Use mock data if licenses array is empty
+  const queryClient = useQueryClient();
+  const { userEmail } = useMemberstack();
+
+  // Prepare licenses
   const displayLicenses = licenses && licenses.length > 0 
-    ? licenses.map(lic => ({
-        id: lic.id || lic.license_key,
-        licenseKey: lic.license_key || lic.licenseKey || 'KEY-GN5B-PUHB-7NLK',
-        status: lic.status || 'Available',
-        billingPeriod: lic.billing_period || lic.billingPeriod || 'Yearly',
-        activatedForSite: lic.activated_for_site || lic.activatedForSite || 'Not Assigned',
-        createdDate: lic.created_date || lic.createdDate || '12/12/26',
-        expiryDate: lic.expiry_date || lic.expiryDate || '12/12/26',
-      }))
-    : mockLicenses;
+    ? licenses.map(lic => {
+        const activatedForSite = lic.activated_for_site || lic.activatedForSite || lic.used_site_domain || lic.site_domain || 'Not Assigned';
+        const isActivated = activatedForSite !== 'Not Assigned' && activatedForSite !== null && activatedForSite !== undefined && String(activatedForSite).trim() !== '';
+        let status = 'Available';
+        if (isActivated) {
+          const backendStatus = (lic.status || '').toLowerCase().trim();
+          status = (backendStatus === 'cancelled' || backendStatus === 'canceled' || backendStatus === 'inactive')
+            ? lic.status.charAt(0).toUpperCase() + lic.status.slice(1)
+            : 'Active';
+        }
+        let createdDate = 'N/A';
+        const createdAt = lic.created_at || lic.created_date || lic.createdDate;
+        if (createdAt) {
+          try {
+            const timestamp = typeof createdAt === 'number' ? createdAt : parseInt(createdAt);
+            const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+            createdDate = !isNaN(dateInMs) ? new Date(dateInMs).toLocaleDateString() : 'N/A';
+          } catch { createdDate = 'N/A'; }
+        }
+        let expiryDate = 'N/A';
+        const expiryTimestamp = lic.renewal_date || lic.expires_at || lic.expiry_date || lic.expiryDate || lic.expiration_date;
+        if (expiryTimestamp) {
+          try {
+            const timestamp = typeof expiryTimestamp === 'number' ? expiryTimestamp : parseInt(expiryTimestamp);
+            const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+            expiryDate = !isNaN(dateInMs) ? new Date(dateInMs).toLocaleDateString() : 'N/A';
+          } catch { expiryDate = 'N/A'; }
+        }
+
+        return {
+          id: lic.id || lic.license_key,
+          licenseKey: lic.license_key || lic.licenseKey || 'N/A',
+          status,
+          billingPeriod: lic.billing_period || lic.billingPeriod || 'N/A',
+          activatedForSite,
+          createdDate,
+          expiryDate,
+          subscriptionId: lic.subscription_id || lic.subscriptionId || null,
+          siteDomain: lic.used_site_domain || lic.site_domain || null,
+        };
+      })
+    : [];
 
   // Close context menu when clicking outside
   useEffect(() => {
@@ -92,7 +75,6 @@ console.log(licenses,"haaa");
         setContextMenu(null);
       }
     };
-
     if (contextMenu) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -100,26 +82,61 @@ console.log(licenses,"haaa");
   }, [contextMenu]);
 
   const handleCopy = async (key) => {
+    if (!key || key === 'N/A') return;
     try {
-      await navigator.clipboard.writeText(key);
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(key);
+      else {
+        const textArea = document.createElement('textarea');
+        textArea.value = key;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+      setCopiedKey(key);
       showSuccess('License key copied to clipboard');
-    } catch (err) {
-      console.error('Failed to copy license key:', err);
-    }
+      setTimeout(() => setCopiedKey(null), 2000);
+    } catch { showError('Failed to copy license key'); }
   };
 
   const handleSearchIconClick = () => {
     setIsSearchExpanded(true);
-    setTimeout(() => {
-      searchInputRef.current?.focus();
-    }, 100);
+    setTimeout(() => searchInputRef.current?.focus(), 100);
   };
 
   const handleSearchBlur = () => {
-    if (!searchQuery.trim()) {
-      setIsSearchExpanded(false);
-    }
+    if (!searchQuery.trim()) setIsSearchExpanded(false);
   };
+
+const handleCancelSubscription = async (subscriptionId, siteDomain) => {
+  if (isCancelling) return;
+  if (!userEmail) return showError('User email not found. Please refresh.');
+  if (!subscriptionId) return showError('Subscription ID not found.');
+  if (!siteDomain) return showError('Site domain not found.');
+
+  const confirmed = window.confirm(
+    `Are you sure you want to cancel the subscription for "${siteDomain}"?`
+  );
+  if (!confirmed) return setContextMenu(null);
+
+  setIsCancelling(true);
+  setContextMenu(null);
+
+  try {
+    const response = await cancelSubscription(userEmail, siteDomain, subscriptionId);
+    showSuccess(response.message || 'Subscription cancelled successfully.');
+
+    // Refresh dashboard or relevant queries
+    await queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(userEmail) });
+  } catch (error) {
+    showError('Failed to cancel subscription: ' + (error.message || error.error || 'Unknown error'));
+  } finally {
+    setIsCancelling(false);
+  }
+};
+
 
  const MENU_WIDTH = 180;
 const MENU_HEIGHT = 140; // adjust if menu grows
@@ -160,9 +177,8 @@ const handleContextMenu = (e, licenseId) => {
 
 
   const handleOpenActivateModal = (licenseId) => {
-    setActivateModal(licenseId);
+    setActivateModal({ id: licenseId });
     setDomainInput('');
-    setContextMenu(null);
   };
 
   const handleCloseActivateModal = () => {
@@ -170,32 +186,25 @@ const handleContextMenu = (e, licenseId) => {
     setDomainInput('');
   };
 
-  const handleActivateSubmit = () => {
-    if (!domainInput.trim()) {
-      showError('Please enter a domain');
-      return;
+  const handleActivateSubmit = async () => {
+    if (!domainInput.trim()) return showError('Please enter a domain');
+    if (!activateModal?.id) return showError('License ID not found');
+    try {
+      await activateLicense(activateModal.id, domainInput.trim(), userEmail);
+      showSuccess(`License activated for ${domainInput}`);
+      handleCloseActivateModal();
+    } catch (err) {
+      showError('Failed to activate license: ' + (err.message || 'Unknown error'));
     }
-    
-    // Here you would typically make an API call to activate the license
-    showSuccess(`License activated for ${domainInput}`);
-    handleCloseActivateModal();
   };
 
-  // Filter licenses based on active tab, search, and billing period
+  // Filter licenses
   const filteredLicenses = displayLicenses.filter(license => {
-    // Tab filter
     if (activeTab === 'Not Assigned' && license.activatedForSite !== 'Not Assigned') return false;
-    if (activeTab === 'Activated' && license.activatedForSite === 'Not Assigned') return false;
+    if (activeTab === 'Activated' && (license.activatedForSite === 'Not Assigned' || license.status !== 'Active')) return false;
     if (activeTab === 'Cancelled' && license.status !== 'Cancelled') return false;
-    
-    // Search filter
-    if (searchQuery && !license.licenseKey.toLowerCase().includes(searchQuery.toLowerCase())) {
-      return false;
-    }
-    
-    // Billing period filter
+    if (searchQuery && !license.licenseKey.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     if (billingPeriodFilter && license.billingPeriod !== billingPeriodFilter) return false;
-    
     return true;
   });
 
@@ -203,7 +212,20 @@ const handleContextMenu = (e, licenseId) => {
     <div className="licenses-container">
       {/* Header */}
       <div className="licenses-header">
-        <h1 className="licenses-title">Licence Keys</h1>
+        <h1 className="licenses-title">
+          Licence Keys
+          {isPolling && (
+            <span style={{ 
+              marginLeft: '10px', 
+              fontSize: '14px', 
+              color: '#666', 
+              fontWeight: 'normal',
+              fontStyle: 'italic'
+            }}>
+              (Processing new licenses...)
+            </span>
+          )}
+        </h1>
         <div className="licenses-header-controls">
           <div className={`licenses-search-wrapper ${isSearchExpanded ? 'expanded' : ''}`}>
             <input
@@ -310,22 +332,33 @@ const handleContextMenu = (e, licenseId) => {
                       <button
                         className="license-view-btn"
                         onClick={() => handleCopy(license.licenseKey)}
-                        title="View License Key"
+                        title={copiedKey === license.licenseKey ? "Copied!" : "Copy license key"}
+                        disabled={license.licenseKey === 'N/A'}
+                        style={{
+                          opacity: copiedKey === license.licenseKey ? 0.6 : 1,
+                          cursor: license.licenseKey === 'N/A' ? 'not-allowed' : 'pointer'
+                        }}
                       >
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="16" height="16" rx="3" fill="#DEE8F4"/>
-<path d="M9.7333 8.46752V10.1825C9.7333 11.6117 9.16163 12.1834 7.73245 12.1834H6.01745C4.58827 12.1834 4.0166 11.6117 4.0166 10.1825V8.46752C4.0166 7.03834 4.58827 6.46667 6.01745 6.46667H7.73245C9.16163 6.46667 9.7333 7.03834 9.7333 8.46752Z" stroke="#292D32" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M12.1835 6.01751V7.73251C12.1835 9.16169 11.6118 9.73336 10.1826 9.73336H9.73348V8.46752C9.73348 7.03834 9.16181 6.46667 7.73264 6.46667H6.4668V6.01751C6.4668 4.58833 7.03847 4.01666 8.46764 4.01666H10.1826C11.6118 4.01666 12.1835 4.58833 12.1835 6.01751Z" stroke="#292D32" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>
-
+                        {copiedKey === license.licenseKey ? (
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect width="16" height="16" rx="3" fill="#10B981" />
+                            <path d="M4 8L6.5 10.5L12 5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        ) : (
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect width="16" height="16" rx="3" fill="#DEE8F4"/>
+                            <path d="M9.7333 8.46752V10.1825C9.7333 11.6117 9.16163 12.1834 7.73245 12.1834H6.01745C4.58827 12.1834 4.0166 11.6117 4.0166 10.1825V8.46752C4.0166 7.03834 4.58827 6.46667 6.01745 6.46667H7.73245C9.16163 6.46667 9.7333 7.03834 9.7333 8.46752Z" stroke="#292D32" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M12.1835 6.01751V7.73251C12.1835 9.16169 11.6118 9.73336 10.1826 9.73336H9.73348V8.46752C9.73348 7.03834 9.16181 6.46667 7.73264 6.46667H6.4668V6.01751C6.4668 4.58833 7.03847 4.01666 8.46764 4.01666H10.1826C11.6118 4.01666 12.1835 4.58833 12.1835 6.01751Z" stroke="#292D32" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
                       </button>
                     </div>
                   </td>
                   {/* <td>
                     <div className="license-cell-content">
-                      <span className="license-status-available">
-                        <span className="status-dot-blue" />
-                        <span>Available</span>
+                      <span className={`license-status-${license.status.toLowerCase() === 'active' ? 'active' : license.status.toLowerCase() === 'cancelled' ? 'cancelled' : 'available'}`}>
+                        <span className={`status-dot-${license.status.toLowerCase() === 'active' ? 'green' : license.status.toLowerCase() === 'cancelled' ? 'red' : 'blue'}`} />
+                        <span>{license.status}</span>
                       </span>
                     </div>
                   </td> */}
@@ -360,7 +393,7 @@ const handleContextMenu = (e, licenseId) => {
                       <button
                         className="license-activate-btn"
                         title="Activate License"
-                        onClick={() => handleOpenActivateModal(license.id || index)}
+                        onClick={(e) => handleOpenActivateModal(license.id || index)}
                       >
                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 <path d="M8 12H16" stroke="#118A41" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -409,7 +442,7 @@ const handleContextMenu = (e, licenseId) => {
 
                             <span>Copy License key</span>
                           </button>
-                          {/* <button 
+                          {<button 
                             className="context-menu-item"
                             onClick={() => {
                               handleOpenActivateModal(license.id || index);
@@ -422,7 +455,24 @@ const handleContextMenu = (e, licenseId) => {
 </svg>
 
                             <span>Activate License</span>
-                          </button> */}
+                          </button>}
+                          {license.subscriptionId && 
+                           license.siteDomain && 
+                           license.status !== 'Cancelled' && 
+                           license.status !== 'Expired' && 
+                           license.status !== 'Cancelling' && 
+                           license.status !== 'inactive' && (
+                            <button
+                              className="context-menu-item context-menu-item-danger"
+                              onClick={() => handleCancelSubscription(license.subscriptionId, license.siteDomain, license.licenseKey)}
+                              disabled={isCancelling}
+                            >
+                              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 4L4 12M4 4L12 12" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                              <span>{isCancelling ? 'Cancelling...' : 'Cancel Subscription'}</span>
+                            </button>
+                          )}
                           <button 
                             className="context-menu-item context-menu-item-disabled"
                             disabled
@@ -452,9 +502,10 @@ const handleContextMenu = (e, licenseId) => {
       </div>
 
       {/* Activate License Modal */}
+      
       {activateModal !== null && (
         <>
-          <div className="modal-overlay" onClick={handleCloseActivateModal} />
+          <div className="modal-overlay"  onClick={(e) => handleCloseActivateModal(e, activateModal.licenseKey)} />
           <div className="activate-modal">
             <div className="activate-modal-header">
               <h2 className="activate-modal-title">Activate license key</h2>
@@ -478,6 +529,7 @@ const handleContextMenu = (e, licenseId) => {
                 onKeyPress={(e) => e.key === 'Enter' && handleActivateSubmit()}
                 autoFocus
               />
+              
               <button
                 className="activate-modal-submit"
                 onClick={handleActivateSubmit}
@@ -489,5 +541,6 @@ const handleContextMenu = (e, licenseId) => {
         </>
       )}
     </div>
-  );
+    
+  );  
 }

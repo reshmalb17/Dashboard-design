@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { useState, useEffect, useMemo } from 'react';
+import { QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { useMemberstack } from './hooks/useMemberstack';
-import { useDashboardData, useLicenses } from './hooks/useDashboardQueries';
+import { useDashboardData, useLicenses, queryKeys } from './hooks/useDashboardQueries';
 import { useNotification } from './hooks/useNotification';
 import { queryClient } from './lib/queryClient';
 import Sidebar from './components/Sidebar';
@@ -19,70 +19,225 @@ import consentLogo from './assets/consent-logo.svg';
 import exportIcon from './assets/export-icon.svg';
 import './App.css';
 
-// Inner component that uses dashboard queries
 function DashboardContent() {
   const { member, userEmail, isAuthenticated, loading: authLoading, error: authError } = useMemberstack();
   const { notification, showSuccess, showError, clear: clearNotification } = useNotification();
+  const queryClient = useQueryClient();
+
   const [maxTimeoutReached, setMaxTimeoutReached] = useState(false);
-  const [activeSection, setActiveSection] = useState('dashboard'); // Default to dashboard
+  const [activeSection, setActiveSection] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
   const [addDomainModalOpen, setAddDomainModalOpen] = useState(false);
-const [hasCheckedAuthOnce, setHasCheckedAuthOnce] = useState(false);
+  const [isPollingLicenses, setIsPollingLicenses] = useState(false);
+  const [isPollingDomains, setIsPollingDomains] = useState(false);
 
-useEffect(() => {
-  if (!authLoading) {
-    setHasCheckedAuthOnce(true);
-  }
-}, [authLoading]);
-  // Debug: Log authentication state
-  useEffect(() => {
-    console.log('[App] Authentication state:', {
-      hasMember: !!member,
-      userEmail,
-      isAuthenticated,
-      authLoading,
-      authError: authError?.message,
-      memberKeys: member ? Object.keys(member) : [],
-      memberEmail: member?.email || member?._email || member?.data?.email || 'NOT FOUND'
-    });
-  }, [member, userEmail, isAuthenticated, authLoading, authError]);
+  const queriesEnabled = isAuthenticated && !!userEmail;
 
-  // Set maximum timeout to prevent infinite loading
+  // Poll for new licenses after purchase (only updates licenses table)
+  const startLicensePolling = (email, expectedQuantity) => {
+    let pollCount = 0;
+    const maxPolls = 30;
+    const pollInterval = 10000;
+
+    const pollForLicenses = async () => {
+      pollCount++;
+
+      try {
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.licenses(email),
+          refetchType: 'active',
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        const licensesData = queryClient.getQueryData(queryKeys.licenses(email));
+        const currentLicenseCount = licensesData?.licenses?.length || 0;
+
+        const previousCount = parseInt(
+          sessionStorage.getItem('licenseCountBeforePurchase') || '0',
+          10
+        );
+
+        if (currentLicenseCount >= previousCount + expectedQuantity) {
+          showSuccess(`Successfully added ${expectedQuantity} license key(s)!`);
+          sessionStorage.removeItem('licenseCountBeforePurchase');
+          setIsPollingLicenses(false);
+          return;
+        }
+
+        if (pollCount < maxPolls) {
+          setTimeout(pollForLicenses, pollInterval);
+        } else {
+          showSuccess(
+            'Your purchase is being processed. License keys will appear shortly.'
+          );
+          sessionStorage.removeItem('licenseCountBeforePurchase');
+          setIsPollingLicenses(false);
+        }
+      } catch (error) {
+        if (pollCount < maxPolls) {
+          setTimeout(pollForLicenses, pollInterval);
+        } else {
+          setIsPollingLicenses(false);
+        }
+      }
+    };
+
+    const licensesData = queryClient.getQueryData(queryKeys.licenses(email));
+    const currentCount = licensesData?.licenses?.length || 0;
+    sessionStorage.setItem('licenseCountBeforePurchase', currentCount.toString());
+
+    // Optimistic placeholders so UI updates immediately
+    if (licensesData) {
+      queryClient.setQueryData(queryKeys.licenses(email), (old) => {
+        const existing = old?.licenses || [];
+        const placeholders = Array.from({ length: expectedQuantity }).map((_, idx) => ({
+          id: `temp-${Date.now()}-${idx}`,
+          license_key: 'Processing...',
+          status: 'processing',
+        }));
+        return {
+          ...old,
+          licenses: [...existing, ...placeholders],
+        };
+      });
+    }
+
+    setTimeout(pollForLicenses, 5000);
+  };
+
+  // Poll for new domains after purchase (updates dashboard data smoothly)
+  const startDomainPolling = (email, expectedDomains, expectedCount) => {
+    let pollCount = 0;
+    const maxPolls = 30;
+    const pollInterval = 10000;
+
+    const pollForDomains = async () => {
+      pollCount++;
+
+      try {
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.dashboard(email),
+          refetchType: 'active',
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        const dashboardData = queryClient.getQueryData(queryKeys.dashboard(email));
+        const currentSites = dashboardData?.sites || {};
+        const currentSitesCount = Object.keys(currentSites).length;
+
+        const previousCount = parseInt(
+          sessionStorage.getItem('sitesCountBeforePurchase') || '0',
+          10
+        );
+
+        const foundDomains = expectedDomains.filter((domain) => {
+          const domainKey = domain.trim().toLowerCase();
+          return Object.keys(currentSites).some((siteKey) => {
+            const key = siteKey.toLowerCase();
+            return (
+              key === domainKey ||
+              key.includes(domainKey) ||
+              domainKey.includes(key)
+            );
+          });
+        });
+
+        if (foundDomains.length >= expectedCount || currentSitesCount > previousCount) {
+          showSuccess(`Successfully added ${expectedCount} domain(s)!`);
+          sessionStorage.removeItem('sitesCountBeforePurchase');
+          setIsPollingDomains(false);
+          return;
+        }
+
+        if (pollCount < maxPolls) {
+          setTimeout(pollForDomains, pollInterval);
+        } else {
+          showSuccess(
+            'Your purchase is being processed. Domains will appear shortly.'
+          );
+          sessionStorage.removeItem('sitesCountBeforePurchase');
+          setIsPollingDomains(false);
+        }
+      } catch (error) {
+        if (pollCount < maxPolls) {
+          setTimeout(pollForDomains, pollInterval);
+        } else {
+          setIsPollingDomains(false);
+        }
+      }
+    };
+
+    const dashboardData = queryClient.getQueryData(queryKeys.dashboard(email));
+    const currentSites = dashboardData?.sites || {};
+    const currentCount = Object.keys(currentSites).length;
+    sessionStorage.setItem('sitesCountBeforePurchase', currentCount.toString());
+
+    setTimeout(pollForDomains, 5000);
+  };
+
+  // Handle return from Stripe
   useEffect(() => {
-    // Reset timeout flag when loading state changes
+    if (!userEmail || !isAuthenticated) return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('session_id');
+    const canceled = urlParams.get('canceled');
+
+    const pendingLicensePurchase = sessionStorage.getItem('pendingLicensePurchase');
+    const pendingDomainPurchase = sessionStorage.getItem('pendingDomainPurchase');
+
+    if (sessionId && pendingLicensePurchase) {
+      const purchaseInfo = JSON.parse(pendingLicensePurchase);
+      sessionStorage.removeItem('pendingLicensePurchase');
+
+      showSuccess(
+        `Payment successful! Processing ${purchaseInfo.quantity} license key(s)...`
+      );
+
+      setIsPollingLicenses(true);
+      startLicensePolling(userEmail, purchaseInfo.quantity);
+
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (sessionId && pendingDomainPurchase) {
+      const purchaseInfo = JSON.parse(pendingDomainPurchase);
+      sessionStorage.removeItem('pendingDomainPurchase');
+
+      showSuccess(
+        `Payment successful! Processing ${purchaseInfo.count} domain(s)...`
+      );
+
+      setIsPollingDomains(true);
+      startDomainPolling(userEmail, purchaseInfo.domains, purchaseInfo.count);
+
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (canceled === 'true') {
+      sessionStorage.removeItem('pendingLicensePurchase');
+      sessionStorage.removeItem('pendingDomainPurchase');
+      showError('Payment was canceled');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [userEmail, isAuthenticated, showSuccess, showError]);
+
+  // Max timeout for auth
+  useEffect(() => {
     if (!authLoading) {
       setMaxTimeoutReached(false);
       return;
     }
-
     const timeout = setTimeout(() => {
       setMaxTimeoutReached(true);
-    }, 3000); // 3 seconds max - show login prompt faster
-
+    }, 5000);
     return () => clearTimeout(timeout);
   }, [authLoading]);
 
-  // Debug: Log query enablement
-  // TEMPORARY: Enable queries for design (using mock data)
-  const queriesEnabled = true; // Always enabled for mock data design
-  useEffect(() => {
-    console.log('[App] Query enablement:', {
-      isAuthenticated,
-      userEmail,
-      queriesEnabled,
-      willFetchDashboard: queriesEnabled,
-      willFetchLicenses: queriesEnabled
-    });
-  }, [isAuthenticated, userEmail, queriesEnabled]);
-
-  // Use TanStack Query hooks - both queries run in parallel automatically
+  // Data queries
   const {
     data: dashboardData,
     isLoading: loadingDashboard,
     error: dashboardError,
-    isFetching: isFetchingDashboard,
-    status: dashboardStatus,
   } = useDashboardData(userEmail, {
     enabled: queriesEnabled,
   });
@@ -91,229 +246,225 @@ useEffect(() => {
     data: licensesData,
     isLoading: loadingLicenses,
     error: licensesError,
-    isFetching: isFetchingLicenses,
-    status: licensesStatus,
   } = useLicenses(userEmail, {
     enabled: queriesEnabled,
   });
-  
-  // Debug: Log query status
-  useEffect(() => {
-    console.log('[App] Query status:', {
-      dashboardStatus,
-      loadingDashboard,
-      isFetchingDashboard,
-      hasDashboardData: !!dashboardData,
-      dashboardError: dashboardError?.message,
-      licensesStatus,
-      loadingLicenses,
-      isFetchingLicenses,
-      hasLicensesData: !!licensesData,
-      licensesError: licensesError?.message,
-    });
-  }, [dashboardStatus, loadingDashboard, isFetchingDashboard, dashboardData, dashboardError, licensesStatus, loadingLicenses, isFetchingLicenses, licensesData, licensesError]);
 
-  const loading = loadingDashboard || loadingLicenses;
-  const sites = dashboardData?.sites || {};
-  const licenses = licensesData?.licenses || [];
-  const subscriptions = dashboardData?.subscriptions || [];
+  const sites = useMemo(() => dashboardData?.sites ?? {}, [dashboardData?.sites]);
+  const licenses = useMemo(
+    () => licensesData?.licenses ?? [],
+    [licensesData?.licenses]
+  );
+  const subscriptions = useMemo(() => {
+    const subs = dashboardData?.subscriptions;
+    if (!subs) return Array.isArray(subs) ? [] : {};
+    return subs;
+  }, [dashboardData?.subscriptions]);
 
-  // Debug: Log data fetching status (MUST be before any early returns)
-  useEffect(() => {
-    console.log('[App] Data fetching status:', {
-      loadingDashboard,
-      loadingLicenses,
-      hasDashboardData: !!dashboardData,
-      hasLicensesData: !!licensesData,
-      userEmail,
-      isAuthenticated,
-      dashboardError,
-      licensesError
-    });
-    if (dashboardData) {
-      console.log('[App] Dashboard data structure:', {
-        hasSites: !!dashboardData.sites,
-        sitesCount: dashboardData.sites ? Object.keys(dashboardData.sites).length : 0,
-        hasSubscriptions: !!dashboardData.subscriptions,
-        subscriptionsType: Array.isArray(dashboardData.subscriptions) ? 'array' : typeof dashboardData.subscriptions,
-        subscriptionsCount: Array.isArray(dashboardData.subscriptions) 
-          ? dashboardData.subscriptions.length 
-          : dashboardData.subscriptions ? Object.keys(dashboardData.subscriptions).length : 0,
-        hasPendingSites: !!dashboardData.pendingSites,
-        pendingSitesCount: dashboardData.pendingSites ? dashboardData.pendingSites.length : 0,
-        fullData: dashboardData
-      });
-    }
-  }, [loadingDashboard, loadingLicenses, dashboardData, licensesData, userEmail, isAuthenticated, dashboardError, licensesError]);
+  const hasCachedData = dashboardData || licensesData;
+  const isFirstLoad = loadingDashboard || loadingLicenses;
+  const shouldShowLoading = isFirstLoad && !hasCachedData;
 
-  // Show error notifications
   const error = dashboardError || licensesError || authError;
   if (error) {
     showError(error.message || 'An error occurred');
   }
 
-  // Show loading state only briefly (optimized for fast loading)
-  if (!hasCheckedAuthOnce &&authLoading && !maxTimeoutReached) {
+  if (
+    maxTimeoutReached ||
+    (!isAuthenticated && !userEmail && !authLoading && !isFirstLoad)
+  ) {
     return (
       <div className="login-container">
-        <div className="card">
-          <div className="loading">Initializing...</div>
-        </div>
-      </div>
-    );
-  }
-
-  // If timeout reached or not authenticated, show login prompt immediately
-  if (maxTimeoutReached || !isAuthenticated) {
-    return (
-      <div className="login-container">
-        {authError && (
-          <div className="error">
-            {authError}
-          </div>
-        )}
+        {authError && <div className="error">{authError}</div>}
         <LoginPrompt />
       </div>
     );
   }
 
-  // Show dashboard with sidebar layout
   return (
     <div className="dashboard-layout">
-      {/* Full width header at top */}
+      {/* Header */}
       <div className="dashboard-header">
         <div className="header-content">
-          {/* Left side - Logo */}
           <div className="header-logo">
             <img src={consentLogo} alt="ConsentBit" className="header-logo-image" />
           </div>
-          
-          {/* Right side - Action buttons */}
           <div className="header-actions">
-              {/* Export button */}
-              <button className="header-btn header-btn-icon" title="Export">
-                <img src={exportIcon} alt="Export" className="header-icon-image" />
-              </button>
-              
-              {/* Purchase License Key button */}
-              <button 
-                className="header-btn header-btn-text"
-                onClick={() => setPurchaseModalOpen(true)}
+            <button className="header-btn header-btn-icon" title="Export">
+              <img src={exportIcon} alt="Export" className="header-icon-image" />
+            </button>
+
+            <button
+              className="header-btn header-btn-text"
+              onClick={() => setPurchaseModalOpen(true)}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
               >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M8 3V13M3 8H13" stroke="#262E84" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-                <span>Purchase License Key</span>
-              </button>
-              
-              {/* Add New Domain button */}
-              <button 
-                className="header-btn header-btn-primary"
-                onClick={() => setAddDomainModalOpen(true)}
+                <path
+                  d="M8 3V13M3 8H13"
+                  stroke="#262E84"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span>Purchase License Key</span>
+            </button>
+
+            <button
+              className="header-btn header-btn-primary"
+              onClick={() => setAddDomainModalOpen(true)}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
               >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M8 3V13M3 8H13" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-                <span>Add New Domain</span>
-              </button>
-            </div>
+                <path
+                  d="M8 3V13M3 8H13"
+                  stroke="white"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span>Add New Domain</span>
+            </button>
           </div>
         </div>
-      
-      {/* Main content area with sidebar */}
+      </div>
+
+      {/* Body */}
       <div className="dashboard-body">
-        {/* Mobile menu overlay */}
         {sidebarOpen && (
-          <div 
-            className="sidebar-overlay" 
+          <div
+            className="sidebar-overlay"
             onClick={() => setSidebarOpen(false)}
           />
         )}
-        
-        <Sidebar 
-          activeSection={activeSection} 
+
+        <Sidebar
+          activeSection={activeSection}
           onSectionChange={(section) => {
             setActiveSection(section);
-            setSidebarOpen(false); // Close sidebar on mobile when section changes
+            setSidebarOpen(false);
           }}
-          userEmail={userEmail}
+          userEmail={userEmail || ''}
           isOpen={sidebarOpen}
         />
         
         {/* Mobile menu toggle button */}
-        <button 
-          className="mobile-menu-toggle"
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          aria-label="Toggle menu"
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M3 12H21M3 6H21M3 18H21" stroke="#262E84" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-        </button>
+      <button
+  className={`mobile-menu-toggle ${sidebarOpen ? 'open' : ''}`}
+  onClick={() => setSidebarOpen(!sidebarOpen)}
+  aria-label="Toggle menu"
+>
+  <span className="bar" />
+  <span className="bar" />
+  <span className="bar" />
+</button>
+
         
         <div className="dashboard-main">
           <div className="dashboard-content">
-          {loading ? (
-            <div className="card">
-              <div className="loading">Loading dashboard data...</div>
-              <p style={{ marginTop: '10px', color: '#666', fontSize: '14px' }}>
-                {loadingDashboard && 'Fetching dashboard data...'}
-                {loadingLicenses && 'Fetching licenses...'}
-              </p>
-            </div>
-          ) : dashboardError || licensesError ? (
-            <div className="card">
-              <div className="error" style={{ color: '#f44336', padding: '20px' }}>
-                <h3>Error loading data</h3>
-                <p>{dashboardError?.message || licensesError?.message || 'Unknown error'}</p>
-                <p style={{ marginTop: '10px', fontSize: '12px', color: '#666' }}>
-                  User: {userEmail || 'Not logged in'}
+            {shouldShowLoading ? (
+              <div className="card">
+                <div className="loading">Loading dashboard data...</div>
+                <p
+                  style={{
+                    marginTop: '10px',
+                    color: '#666',
+                    fontSize: '14px',
+                  }}
+                >
+                  {loadingDashboard && 'Fetching dashboard data...'}
+                  {loadingLicenses && ' Fetching licenses...'}
                 </p>
               </div>
-            </div>
-          ) : (
-            <>
-              {activeSection === 'dashboard' && (
-                <Dashboard />
-              )}
-              {activeSection === 'domains' && (
-                <Sites sites={sites} userEmail={userEmail} />
-              )}
-              {activeSection === 'licenses' && (
-                <Licenses licenses={licenses} />
-              )}
-              {activeSection === 'profile' && (
-                <Profile />
-              )}
-            </>
-          )}
+            ) : dashboardError || licensesError ? (
+              <div className="card">
+                <div
+                  className="error"
+                  style={{ color: '#f44336', padding: '20px' }}
+                >
+                  <h3>Error loading data</h3>
+                  <p>
+                    {dashboardError?.message ||
+                      licensesError?.message ||
+                      'Unknown error'}
+                  </p>
+                  <p
+                    style={{
+                      marginTop: '10px',
+                      fontSize: '12px',
+                      color: '#666',
+                    }}
+                  >
+                    User: {userEmail || 'Not logged in'}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {activeSection === 'dashboard' && (
+                  <Dashboard
+                    sites={sites}
+                    subscriptions={subscriptions}
+                    licenses={licenses}
+                    isPolling={isPollingDomains}
+                  />
+                )}
+
+                {activeSection === 'domains' && (
+                  <Sites
+                    sites={sites}
+                    subscriptions={subscriptions}
+                    licenses={licenses}
+                    userEmail={userEmail || ''}
+                    isPolling={isPollingDomains}
+                  />
+                )}
+
+                {activeSection === 'licenses' && (
+                  <Licenses licenses={licenses} isPolling={isPollingLicenses} />
+                )}
+
+                {activeSection === 'profile' && <Profile />}
+              </>
+            )}
           </div>
         </div>
       </div>
 
       <Notification notification={notification} onClose={clearNotification} />
-      <PurchaseLicenseModal 
-        isOpen={purchaseModalOpen} 
-        onClose={() => setPurchaseModalOpen(false)} 
+      <PurchaseLicenseModal
+        isOpen={purchaseModalOpen}
+        onClose={() => setPurchaseModalOpen(false)}
       />
-      <AddDomainModal 
-        isOpen={addDomainModalOpen} 
-        onClose={() => setAddDomainModalOpen(false)} 
+      <AddDomainModal
+        isOpen={addDomainModalOpen}
+        onClose={() => setAddDomainModalOpen(false)}
+        userEmail={userEmail || ''}
       />
     </div>
   );
 }
 
-// Main App component with QueryClientProvider
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <DashboardContent />
-      {/* React Query DevTools - only in development */}
-      {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
+      {import.meta.env.DEV && (
+        <ReactQueryDevtools initialIsOpen={false} />
+      )}
     </QueryClientProvider>
   );
 }
 
 export default App;
-
