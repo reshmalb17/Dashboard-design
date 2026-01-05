@@ -40,48 +40,52 @@ export default function AddDomainModal({ isOpen, onClose, userEmail }) {
     setConfirmedDomains(newConfirmed);
   };
 const handlePayNow = async () => {
-  const validDomains = domains
+  // Validate user is logged in
+  if (!userEmail) {
+    showError('Please log in to add sites');
+    return;
+  }
+
+  // Build valid sites from domains input
+  const sites = domains
     .map(d => d.trim())
     .filter(trimmed => trimmed && trimmed !== 'www.domain.com');
 
-  console.log('Valid domains for payment:', validDomains);
-
-  if (!validDomains.length) {
+  if (!sites.length) {
     showError('Please enter at least one valid domain');
     return;
   }
 
-  if (!userEmail) {
-    showError('User email not found. Please refresh the page.');
-    return;
-  }
-  console.log('User email:', userEmail);
-
   setIsProcessing(true);
 
   try {
-    const billingPeriod = billingCycle.toLowerCase(); // 'monthly' | 'yearly'
-    const sites = validDomains.map(d => d.trim());
+    const billingPeriod = billingCycle.toLowerCase(); // 'monthly' or 'yearly'
 
-    // MISSING BEFORE: actually call your backend
-    const checkoutData = await createSiteCheckout(userEmail, sites, billingPeriod);
-    console.log('Checkout data received:', checkoutData);
-    // or, if you don’t have that wrapper:
-    // const checkoutData = await apiRequest('/create-site-checkout', {
-    //   method: 'POST',
-    //   body: JSON.stringify({ email: userEmail, sites, billing_period: billingPeriod }),
-    // });
+    // Call the create-site-checkout endpoint
+    const response = await createSiteCheckout(userEmail, sites, billingPeriod);
 
-    if (checkoutData.url) {
-      window.location.href = checkoutData.url;
+    // Check if checkout_url is returned
+    if (response && response.checkout_url) {
+      // Optional: store info for when user returns
+      sessionStorage.setItem('pendingSitesPurchase', JSON.stringify({
+        sites,
+        billingPeriod,
+        timestamp: Date.now(),
+      }));
+
+      // Redirect user to Stripe checkout
+      window.location.href = response.checkout_url;
     } else {
-      throw new Error('No checkout URL received');
+      showError('Failed to create checkout session. Please try again.');
+      setIsProcessing(false);
     }
-  } catch (err) {
-    showError('Failed to process payment: ' + (err.message || 'Unknown error'));
+  } catch (error) {
+    const errorMessage = error.message || error.error || 'Failed to process payment. Please try again.';
+    showError(errorMessage);
     setIsProcessing(false);
   }
 };
+
 
   if (!isOpen) return null;
 

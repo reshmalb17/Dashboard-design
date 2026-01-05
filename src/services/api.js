@@ -309,30 +309,38 @@ export async function removeSite(userEmail, site) {
   });
 }
 
-// Add sites in batch (for pending sites)
-export async function createSiteCheckout(email, sites, billingPeriod) {
-  console.log('Creating site checkout with:', { email, sites, billingPeriod });
-  return apiRequest('/create-site-checkout', {
-    method: 'POST',
-    body: JSON.stringify({
-      email,
-      sites,               // ['a.com', 'b.com']
-      billing_period: billingPeriod, // 'monthly' | 'yearly'
-    }),
-  });
-}
+// // Add sites in batch (for pending sites)
+// export async function createSiteCheckout(email, sites, billingPeriod) {
+//   console.log('Creating site checkout with:', { email, sites, billingPeriod });
+//   return apiRequest('/create-site-checkout', {
+//     method: 'POST',
+//     body: JSON.stringify({
+//       email,
+//       sites,               // ['a.com', 'b.com']
+//       billing_period: billingPeriod, // 'monthly' | 'yearly'
+//     }),
+//   });
+// }
 
 
 // Create checkout from pending sites
-export async function createCheckoutFromPending(userEmail, billingPeriod) {
-  return apiRequest('/create-checkout-from-pending', {
+export async function createSiteCheckout(email, sites, billingPeriod) {
+  const res = await fetch(`${API_BASE}/create-site-checkout`, {
     method: 'POST',
-    body: JSON.stringify({ 
-      email: userEmail,
-      billing_period: billingPeriod
-    }),
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, sites, billing_period: billingPeriod }),
   });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data?.message || data?.error || 'Checkout failed');
+  }
+
+  return data; // { checkout_url, session_id, ... }
 }
+
 
 // Remove pending site
 export async function removePendingSite(userEmail, site) {
