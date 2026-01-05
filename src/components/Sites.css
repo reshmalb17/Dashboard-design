@@ -110,7 +110,7 @@
   border: 1px solid #8B77F94D;
   border-radius: 50px;
   background: #FFFFFF80;
-  color: #333;
+  
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -139,7 +139,7 @@
   border: 1px solid #8B77F94D;
   border-radius: 50px;
   background: #FFFFFF80;
-  color: #333;
+ 
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -464,12 +464,12 @@
 /* Responsive */
 @media (max-width: 768px) {
   .domains-header {
-    flex-direction: column;
-    align-items: flex-start;
+    
     gap: 16px;
   }
 
   .domains-search-wrapper {
+    margin-top: 0;
     width: 100%;
   }
 

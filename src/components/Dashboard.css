@@ -391,18 +391,30 @@ td.black {
 /* Responsive */
 @media (max-width: 1024px) {
   .dashboard-stats {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto;
+  }
+
+  
+
+  .dashboard-stats .stat-card:nth-child(4),
+  .dashboard-stats .stat-card:nth-child(5) {
+    grid-column: auto;
   }
 }
 
+
 @media (max-width: 768px) {
   .dashboard-section {
-    padding: 16px;
+    padding: 0px;
   }
 
   .dashboard-stats {
     grid-template-columns: 1fr;
+    gap: 16px;
   }
+
+
 
   .recent-domains-table-container {
     overflow-x: scroll;

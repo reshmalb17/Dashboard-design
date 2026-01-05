@@ -156,6 +156,7 @@ button.header-btn.header-btn-primary {
 @media (max-width: 1024px) {
   .dashboard-header {
     padding: 15px 20px;
+    position: relative;
   }
   
   .header-content {
@@ -186,12 +187,15 @@ button.header-btn.header-btn-primary {
 @media (max-width: 768px) {
   .dashboard-body {
     flex-direction: column;
+    height: 100%;
+    max-height: 100%;
   }
   
   .dashboard-main {
     margin-left: 0;
     padding: 15px;
     width: 100%;
+    max-width: 100%;
   }
   
   .dashboard-header {
@@ -232,7 +236,61 @@ button.header-btn.header-btn-primary {
   }
   
   .dashboard-content {
-    padding: 15px;
+    padding: 0px;
+    padding-left: 0!important;
+  }
+}
+@media (max-width: 768px) {
+
+  body{
+    height: 100%!important;
+    max-height: 100%!important;
+    overflow: auto!important;
+  }
+
+#root .dashboard-layout {
+  height: 100%;
+  max-height: 100%;
+  overflow: auto;
+}
+body #root {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    max-height: unset;
+    overflow: auto;
+}
+
+  .header-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .header-logo {
+    justify-content: center;
+  }
+
+  .header-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .header-btn {
+    width: 100%;
+    justify-content: center;
+  }
+ .dashboard-header {
+    position: relative;   /* 🔥 removes sticky */
+    top: unset;
+    z-index: auto;
+    padding: 12px 15px;
+    border-radius: 0;
+  }
+  .header-btn-icon {
+    grid-column: span 2; /* export button full width */
   }
 }
 
@@ -249,40 +307,82 @@ button.header-btn.header-btn-primary {
   .header-btn {
     width: 100%;
     min-width: 100%;
+    font-size: 10px;
   }
   
   .header-btn-icon {
     width: 100%;
     min-width: 100%;
+    
   }
   
   .header-logo-image {
-    height: 24px;
+    height: 15px;
   }
   
   .dashboard-content {
-    padding: 10px;
+    padding: 0px;
   }
 }
 
 /* Mobile Menu Toggle Button */
 .mobile-menu-toggle {
-  display: none;
   position: fixed;
-  top: 20px;
-  left: 20px;
-  z-index: 150;
-  background: white;
-  border: 1px solid #d1d5db;
+  top: 12px;
+  left: 16px;
+  width: 40px;
+  height: 40px;
+
+  background: transparent;
+  border: none;
   border-radius: 8px;
-  padding: 10px;
+  z-index: 400;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+
   cursor: pointer;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 0;
 }
 
-@media (max-width: 768px) {
+/* ✅ BAR STYLING (IMPORTANT PART) */
+.mobile-menu-toggle .bar {
+  display: block;            /* ❗ REQUIRED */
+  width: 22px;
+  height: 2px;
+
+  background-color: #000;
+  border-radius: 2px;
+
+  transition:
+    transform 0.3s ease,
+    opacity 0.2s ease;
+  transform-origin: center;
+}
+
+/* 🔥 OPEN STATE → PERFECT CROSS */
+.mobile-menu-toggle.open .bar:nth-child(1) {
+  transform: translateY(8px) rotate(45deg);
+}
+
+.mobile-menu-toggle.open .bar:nth-child(2) {
+  opacity: 0;
+}
+
+.mobile-menu-toggle.open .bar:nth-child(3) {
+  transform: translateY(-8px) rotate(-45deg);
+}
+
+button.mobile-menu-toggle.open {
+    left: 235px;
+    top: 0;
+}
+@media (min-width: 769px) {
   .mobile-menu-toggle {
-    display: block;
+    display: none;
   }
 }
 
@@ -301,6 +401,7 @@ button.header-btn.header-btn-primary {
 @media (max-width: 768px) {
   .sidebar-overlay {
     display: block;
+    top: 0;
   }
 }
 
@@ -607,3 +708,25 @@ padding-top: 8px;
   color: #333;
 }
 
+@media (max-width: 1024px) {
+  .sidebar {
+    width: 240px;
+  }
+}
+@media (max-width: 1024px) {
+  .sidebar {
+    width: 240px;
+  }
+}
+@media (max-width: 768px) {
+  .sidebar-item {
+    padding: 14px 18px;
+    font-size: 15px;
+  }
+
+  .domains-title, .licenses-title {
+    font-size: 18px;
+    margin-top: 0;
+  }
+
+}

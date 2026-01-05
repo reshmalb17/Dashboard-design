@@ -181,11 +181,12 @@
 }
 
 .domain-add-btn {
-  background: #3B82F6;
+  padding: 0;
+  border: none;
 }
 
 .domain-add-btn:hover {
-  background: #2563EB;
+  
 }
 
 /* Cost Section */
