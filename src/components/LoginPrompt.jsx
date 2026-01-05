@@ -275,10 +275,10 @@ export default function LoginPrompt() {
                 className="login-button"
                 disabled={isLoading}
               >
-                {isLoading ? 'Sending...' : 'Send Magic Link'}
+                {isLoading ? 'Sending...' : 'Send verification code.'}
               </button>
               
-              {message && (
+              {(
                 <p className="login-inbox-message">Please check your Email Inbox</p>
               )}
             </form>

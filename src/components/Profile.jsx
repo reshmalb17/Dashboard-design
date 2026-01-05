@@ -77,6 +77,10 @@ export default function Profile() {
               <span className="profile-detail-label">Email Id:</span>
               <span className="profile-detail-value">{displayEmail}</span>
             </div>
+            {/* <div className="profile-detail-row">
+              <span className="profile-detail-label">payment ID:</span>
+              <span className="profile-detail-value">{paymentId}</span>
+            </div> */}
           </div>
         </div>
 

@@ -44,7 +44,7 @@
 .domains-search-wrapper.expanded .domains-search-input {
   width: 300px;
   opacity: 1;
-  padding: 10px 16px;
+  padding: 11px 16px;
 }
 
 .domains-search-input:focus {
@@ -110,7 +110,7 @@
   border: 1px solid #8B77F94D;
   border-radius: 50px;
   background: #FFFFFF80;
-  color: #333;
+  
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -139,7 +139,7 @@
   border: 1px solid #8B77F94D;
   border-radius: 50px;
   background: #FFFFFF80;
-  color: #333;
+ 
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -269,7 +269,7 @@
   text-align: left;
   font-size: 14px;
   font-weight: 600;
-  color: #333;
+ 
   border-bottom: 1px solid #e5e7eb;
   white-space: nowrap;
 }
@@ -534,12 +534,12 @@
 /* Responsive */
 @media (max-width: 768px) {
   .domains-header {
-    flex-direction: column;
-    align-items: flex-start;
+    
     gap: 16px;
   }
 
   .domains-search-wrapper {
+    margin-top: 0;
     width: 100%;
   }
 
@@ -560,4 +560,61 @@
   .domains-table-wrapper {
     overflow-x: auto;
   }
+}
+/* Status dropdown menu tweak */
+.status-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: auto;
+  min-width: 133px;
+  padding: 8px 10px;
+  border-radius: 5px;
+}
+
+/* Option button = transparent container, pill inside */
+.status-dropdown-option {
+  background: transparent;
+  padding: 6px 0;
+}
+
+/* Pill base (like screenshot) */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Per-status colors */
+.status-pill-active {
+  background: #bbf7d0;   /* light green */
+  color: #065f46;
+}
+
+.status-pill-cancelled,
+.status-pill-cancelling {
+  background: #fecaca;   /* light red */
+  color: #b91c1c;
+}
+
+.status-pill-expired {
+  background: #e5e7eb;   /* gray */
+  color: #374151;
+}
+
+/* Dot inside pill */
+.status-pill-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+/* Optional: subtle hover state */
+.status-dropdown-option:hover .status-pill {
+  filter: brightness(0.96);
 }

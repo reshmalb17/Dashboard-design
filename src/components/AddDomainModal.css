@@ -9,6 +9,28 @@
  backdrop-filter: blur(15px);
   background: #0A091F38;
 }
+.add-domain-modal-left {
+  overflow-y: auto;       /* 🔑 scroll here */
+  min-height: 0;          /* 🔑 required */
+}
+.domain-input-wrapper{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 750px;
+  width: 100%;
+  border: 1px solid #45425E66;
+    border-radius: 10px;
+    padding-right: 9px;
+}
+.add-domain-modal-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;          /* 🔑 REQUIRED for scrolling in flex */
+}
+.add-domain-modal {
+  max-height: 90vh;        /* 🔑 important */
+}
 
 .add-domain-modal {
   position: fixed;
@@ -120,7 +142,7 @@
 .domain-input {
   flex: 1;
   padding: 13px 14px;
-  border: 1px solid #45425E66;
+  border: none;
   border-radius: 10px;
   font-size: 18px;
   color: #262E84;
@@ -159,11 +181,12 @@
 }
 
 .domain-add-btn {
-  background: #3B82F6;
+  padding: 0;
+  border: none;
 }
 
 .domain-add-btn:hover {
-  background: #2563EB;
+  
 }
 
 /* Cost Section */

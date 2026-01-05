@@ -80,7 +80,7 @@ function StatusDropdown({ value, onChange }) {
       </button>
       {isOpen && (
         <div className="status-dropdown-menu">
-          <button
+          {/* <button
             className="status-dropdown-option"
             onClick={() => {
               onChange("");
@@ -88,8 +88,8 @@ function StatusDropdown({ value, onChange }) {
             }}
           >
             Status
-          </button>
-          <div className="status-dropdown-separator" />
+          </button> */}
+          {/* <div className="status-dropdown-separator" /> */}
           {statusOptions.map((option) => (
             <button
               key={option.value}
@@ -102,10 +102,14 @@ function StatusDropdown({ value, onChange }) {
               }}
             >
               <span
+      className={`status-pill status-pill-${option.value.toLowerCase()}`}
+    >
+              <span
                 className="status-dropdown-dot"
                 style={{ backgroundColor: option.color }}
               />
               <span>{option.label}</span>
+              </span>
             </button>
           ))}
         </div>
@@ -477,11 +481,34 @@ export default function Sites({ sites, subscriptions = {}, licenses = [], userEm
     }));
   };
 
-  const handleContextMenu = (e, domainId) => {
-    e.preventDefault();
-    e.stopPropagation();
+const MENU_WIDTH = 180;
+const MENU_HEIGHT = 120; // approx height (2 items)
 
-    const rect = e.currentTarget.getBoundingClientRect();
+const handleContextMenu = (e, domainId) => {
+  e.preventDefault();
+  e.stopPropagation();
+
+  const rect = e.currentTarget.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  let top = rect.bottom + 6; // default: below
+  let left = rect.right - MENU_WIDTH; // default: align left
+
+  // 🔼 If menu goes out at bottom → open upwards
+  if (top + MENU_HEIGHT > viewportHeight) {
+    top = rect.top - MENU_HEIGHT - 6;
+  }
+
+  // ◀️ If menu goes out on right → shift left
+  if (left + MENU_WIDTH > viewportWidth) {
+    left = viewportWidth - MENU_WIDTH - 8;
+  }
+
+  // ▶️ If menu goes out on left
+  if (left < 8) {
+    left = 8;
+  }
 
     setContextMenu({
       domainId,
@@ -720,7 +747,7 @@ export default function Sites({ sites, subscriptions = {}, licenses = [], userEm
 
       {/* Filters */}
       <div className="domains-filters">
-        <select
+        {/* <select
           className="domains-filter-select"
           value={filters.source}
           onChange={(e) =>
@@ -729,8 +756,11 @@ export default function Sites({ sites, subscriptions = {}, licenses = [], userEm
         >
           <option value="">Source</option>
           <option value="Direct payment">Direct payment</option>
+          <option value="License Key">License Key</option>
+        </select> */}
+        {/* <select
           <option value="Site payment">Site payment</option>
-        </select>
+        </select> */}
 
         <StatusDropdown
           value={filters.status}
@@ -804,7 +834,7 @@ export default function Sites({ sites, subscriptions = {}, licenses = [], userEm
           <thead>
             <tr>
               <th>Active</th>
-              <th>Source</th>
+              
               <th>Status</th>
               <th>Billing Period</th>
               <th>Expiration Date</th>
@@ -821,7 +851,7 @@ export default function Sites({ sites, subscriptions = {}, licenses = [], userEm
                     {domain.siteName || domain.domain}
                   </div>
                 </td>
-                <td>
+                {/* <td>
                   <div className="domain-cell-content">
                     <span
                       className={`source-tag source-tag-${
@@ -833,7 +863,7 @@ export default function Sites({ sites, subscriptions = {}, licenses = [], userEm
                       {domain.source}
                     </span>
                   </div>
-                </td>
+                </td> */}
                 <td>
                   <div className="domain-cell-content">
                     <span className={`status-tag status-tag-${(domain.status || 'active').toLowerCase().trim()}`}>
@@ -1071,5 +1101,6 @@ export default function Sites({ sites, subscriptions = {}, licenses = [], userEm
         </table>
       </div>
     </div>
+    
   );
 }

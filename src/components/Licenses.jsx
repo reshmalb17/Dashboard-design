@@ -138,16 +138,43 @@ const handleCancelSubscription = async (subscriptionId, siteDomain) => {
 };
 
 
-  const handleContextMenu = (e, licenseId) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const rect = e.currentTarget.getBoundingClientRect();
-    setContextMenu({
-      licenseId,
-      top: rect.bottom + 6,
-      left: rect.left - 180,
-    });
-  };
+ const MENU_WIDTH = 180;
+const MENU_HEIGHT = 140; // adjust if menu grows
+
+const handleContextMenu = (e, licenseId) => {
+  e.preventDefault();
+  e.stopPropagation();
+
+  const rect = e.currentTarget.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  let top = rect.bottom + 6; // default: below
+  let left = rect.left - MENU_WIDTH + rect.width; // open left aligned
+
+  // 🔽 If going out of bottom → open upwards
+  if (top + MENU_HEIGHT > viewportHeight) {
+    top = rect.top - MENU_HEIGHT - 6;
+  }
+
+  // ▶️ If going out of right
+  if (left + MENU_WIDTH > viewportWidth) {
+    left = viewportWidth - MENU_WIDTH - 8;
+  }
+
+  // ◀️ If going out of left
+  if (left < 8) {
+    left = 8;
+  }
+
+  setContextMenu({
+    licenseId,
+    top,
+    left,
+  });
+};
+
+
 
   const handleOpenActivateModal = (licenseId) => {
     setActivateModal({ id: licenseId });
@@ -275,7 +302,7 @@ const handleCancelSubscription = async (subscriptionId, siteDomain) => {
           <thead>
             <tr>
               <th>License Key</th>
-              <th>Status</th>
+              {/* <th>Status</th> */}
               <th>Billing Period</th>
               <th>Activated for site</th>
               <th>Created date</th>
@@ -327,14 +354,14 @@ const handleCancelSubscription = async (subscriptionId, siteDomain) => {
                       </button>
                     </div>
                   </td>
-                  <td>
+                  {/* <td>
                     <div className="license-cell-content">
                       <span className={`license-status-${license.status.toLowerCase() === 'active' ? 'active' : license.status.toLowerCase() === 'cancelled' ? 'cancelled' : 'available'}`}>
                         <span className={`status-dot-${license.status.toLowerCase() === 'active' ? 'green' : license.status.toLowerCase() === 'cancelled' ? 'red' : 'blue'}`} />
                         <span>{license.status}</span>
                       </span>
                     </div>
-                  </td>
+                  </td> */}
                   <td>
                     <div  className={`license-cell-content ${
     license.billingPeriod === 'Monthly'
@@ -396,8 +423,8 @@ const handleCancelSubscription = async (subscriptionId, siteDomain) => {
                           className="license-context-menu"
                           style={{
                             position: 'fixed',
-                            top: contextMenu.y,
-                            left: contextMenu.x,
+                            top: contextMenu.top,
+                            left: contextMenu.left,
                           }}
                         >
                           <button 
@@ -415,7 +442,7 @@ const handleCancelSubscription = async (subscriptionId, siteDomain) => {
 
                             <span>Copy License key</span>
                           </button>
-                          <button 
+                          {<button 
                             className="context-menu-item"
                             onClick={() => {
                               handleOpenActivateModal(license.id || index);
@@ -428,7 +455,7 @@ const handleCancelSubscription = async (subscriptionId, siteDomain) => {
 </svg>
 
                             <span>Activate License</span>
-                          </button>
+                          </button>}
                           {license.subscriptionId && 
                            license.siteDomain && 
                            license.status !== 'Cancelled' && 
@@ -450,13 +477,16 @@ const handleCancelSubscription = async (subscriptionId, siteDomain) => {
                             className="context-menu-item context-menu-item-disabled"
                             disabled
                           >
-                           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g opacity="0.5">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
 <rect width="16" height="16" rx="3" fill="#DEE8F4"/>
-<path d="M8.9665 4.66675H7.03317C6.80651 4.66675 6.4865 4.80008 6.3265 4.96008L4.95984 6.32675C4.79984 6.48675 4.6665 6.80675 4.6665 7.03342V8.96675C4.6665 9.19341 4.79984 9.51341 4.95984 9.67341L6.3265 11.0401C6.4865 11.2001 6.80651 11.3334 7.03317 11.3334H8.9665C9.19317 11.3334 9.51317 11.2001 9.67317 11.0401L11.0398 9.67341C11.1998 9.51341 11.3332 9.19341 11.3332 8.96675V7.03342C11.3332 6.80675 11.1998 6.48675 11.0398 6.32675L9.67317 4.96008C9.51317 4.80008 9.19317 4.66675 8.9665 4.66675Z" stroke="#292D32" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M5.64648 10.3601L10.3598 5.64673" stroke="#292D32" stroke-linecap="round" stroke-linejoin="round"/>
-</g>
+<path d="M11 5.99333C9.89 5.88333 8.77333 5.82666 7.66 5.82666C7 5.82666 6.34 5.85999 5.68 5.92666L5 5.99333" stroke="#292D32" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6.83301 5.6565L6.90634 5.21984C6.95967 4.90317 6.99967 4.6665 7.56301 4.6665H8.43634C8.99967 4.6665 9.04301 4.9165 9.09301 5.22317L9.16634 5.6565" stroke="#292D32" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M10.283 7.04663L10.0663 10.4033C10.0296 10.9266 9.99964 11.3333 9.06964 11.3333H6.92964C5.99964 11.3333 5.96964 10.9266 5.93298 10.4033L5.71631 7.04663" stroke="#292D32" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M7.44287 9.5H8.55287" stroke="#292D32" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M7.16699 8.1665H8.83366" stroke="#292D32" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
+
+
 
                             <span>Cancel License</span>
                           </button>
@@ -472,6 +502,7 @@ const handleCancelSubscription = async (subscriptionId, siteDomain) => {
       </div>
 
       {/* Activate License Modal */}
+      
       {activateModal !== null && (
         <>
           <div className="modal-overlay"  onClick={(e) => handleCloseActivateModal(e, activateModal.licenseKey)} />
@@ -510,5 +541,6 @@ const handleCancelSubscription = async (subscriptionId, siteDomain) => {
         </>
       )}
     </div>
-  );
+    
+  );  
 }
