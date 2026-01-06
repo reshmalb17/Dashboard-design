@@ -225,13 +225,13 @@ box-shadow: 0px 24px 33px 0px #262E8433;
 /* Responsive */
 @media (max-width: 768px) {
   .purchase-modal {
-    width: 95%;
-    margin: 20px;
+   width: 97%!important;
   }
 
   .purchase-modal-body {
     grid-template-columns: 1fr;
     gap: 10px;
+           padding: 11px 15px !important;
   }
 }
 
