@@ -435,7 +435,7 @@ function DashboardContent() {
                   <Licenses licenses={licenses} isPolling={isPollingLicenses} />
                 )}
 
-                {activeSection === 'profile' && <Profile />}
+                {activeSection === 'profile' && <Profile userEmail={userEmail || ''} />}
               </>
             )}
           </div>

@@ -205,6 +205,76 @@ export async function getLicenses(userEmail) {
     throw error;
   }
 }
+// Get user licenses
+export async function getLicensesStatus(userEmail) {
+  try {
+    // Validate email before making API call (matching reference dashboard)
+    if (!userEmail || !userEmail.includes('@')) {
+      console.error('[API] ❌ Invalid email for licenses API call:', userEmail);
+      throw new Error('Invalid email address. Please log out and log in again.');
+    }
+    
+    // Normalize email (lowercase and trim) - matching reference
+    const normalizedEmail = userEmail.toLowerCase().trim();
+    
+    const url = `${API_BASE}/api/licenses/status?email=${encodeURIComponent(normalizedEmail)}`;
+    console.log('[API] Fetching licenses:', {  
+      userEmail: normalizedEmail,      
+    });
+    
+    // Try email-based endpoint first with timeout
+    let response;
+    try {
+      response = await Promise.race([
+        fetch(url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include'
+        }),
+        createTimeoutPromise(REQUEST_TIMEOUT)
+      ]);
+    } catch (error) {
+      if (error.message === 'Request timeout') {
+        throw new Error('Request timeout - server took too long to respond');
+      }
+      throw error;
+    }
+
+    // If email endpoint doesn't work, try with session cookie
+    if (!response.ok && response.status === 401) {
+      try {
+        response = await Promise.race([
+          fetch(`${API_BASE}/licenses`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            credentials: 'include'
+          }),
+          createTimeoutPromise(REQUEST_TIMEOUT)
+        ]);
+      } catch (error) {
+        if (error.message === 'Request timeout') {
+          throw new Error('Request timeout - server took too long to respond');
+        }
+        throw error;
+      }
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to load licenses: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    throw error;
+  }
+}
+
 
 // Add a new site
 export async function addSite(userEmail, site, price) {
