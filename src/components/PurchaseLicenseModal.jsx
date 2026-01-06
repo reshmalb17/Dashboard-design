@@ -50,35 +50,47 @@ export default function PurchaseLicenseModal({ isOpen, onClose }) {
 };
 
 const handlePayNow = async () => {
-  if (!userEmail) {
-    showError('Please log in to purchase license keys');
-    return;
-  }
-
-  const numericQty =
-    typeof quantity === 'string' ? parseInt(quantity, 10) : quantity;
-
-  if (!numericQty || numericQty < 1) {
-    showError('Please select at least 1 license key');
-    return;
-  }
-
-  if (numericQty > 25) {
-    showError('Maximum 25 license keys per purchase');
-    return;
-  }
-
-  setIsProcessing(true);
-
-  try {
-    const billingPeriod = billingCycle.toLowerCase();
-    const response = await purchaseQuantity(userEmail, numericQty, billingPeriod);
-    // ...rest as before
-  } catch (error) {
-    // ...error handling as before
-  }
-};
-
+    // Validate user is logged in
+    if (!userEmail) {
+      showError('Please log in to purchase license keys');
+      return;
+    }
+    // Validate quantity
+    if (quantity < 1) {
+      showError('Please select at least 1 license key');
+      return;
+    }
+    // Validate quantity max (backend allows up to 25)
+    if (quantity > 25) {
+      showError('Maximum 25 license keys per purchase');
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      // Convert billing cycle to lowercase for API
+      const billingPeriod = billingCycle.toLowerCase(); // 'monthly' or 'yearly'
+      // Call the purchase-quantity endpoint
+      const response = await purchaseQuantity(userEmail, quantity, billingPeriod);
+      // Check if checkout_url is returned
+      if (response && response.checkout_url) {
+        // Store purchase info in sessionStorage for when user returns
+        sessionStorage.setItem('pendingLicensePurchase', JSON.stringify({
+          quantity,
+          billingPeriod: billingCycle.toLowerCase(),
+          timestamp: Date.now()
+        }));
+        // Redirect user to Stripe checkout
+        window.location.href = response.checkout_url;
+      } else {
+        showError('Failed to create checkout session. Please try again.');
+        setIsProcessing(false);
+      }
+    } catch (error) {
+      const errorMessage = error.message || error.error || 'Failed to process purchase. Please try again.';
+      showError(errorMessage);
+      setIsProcessing(false);
+    }
+  };
 //   const handleQuantityBlur = () => {
 //   let value = parseInt(quantity, 10);
 //   if (isNaN(value) || value < 1) value = 1;
