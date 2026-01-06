@@ -465,7 +465,7 @@ return (
           <div className="stat-background-icon framer-bg"><img src={Framer} alt="framer" /></div>
         </div>
         <div className="stat-card not-assigned-card">
-          <div className="stat-label"><span>Not assigned </span>license keys</div>
+          <div className="stat-label"><span>Unassigned </span>license keys</div>
           <div className="stat-value not-assigned-value" style={{color:"#5C577D"}}>
             {dashboardStats.notAssignedLicenseKeys}
           </div>

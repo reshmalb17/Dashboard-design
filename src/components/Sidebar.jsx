@@ -21,7 +21,7 @@ export default function Sidebar({ activeSection, onSectionChange, userEmail, isO
   const sections = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'domains', label: 'Domains' },
-    { id: 'licenses', label: 'Licence Keys' },
+    { id: 'licenses', label: 'Bulk Purchase' },
     { id: 'profile', label: 'Profile' },
   ];
 
