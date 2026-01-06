@@ -5,9 +5,13 @@ import { useNotification } from '../hooks/useNotification';
 import './Profile.css';
 import profileImg from '../assets/profileImg.png'
 
-export default function Profile() {
+export default function Profile({ userEmail }) {
+
+  // // All hooks must be called before any conditional returns (Rules of Hooks)
+  // const { userEmail } = useMemberstack(); // Get email from login
+  // const { showSuccess, showError } = useNotification();
   // All hooks must be called before any conditional returns (Rules of Hooks)
-  const { userEmail } = useMemberstack(); // Get email from login
+  // const { userEmail } = useMemberstack(); // Get email from login
   const { showSuccess, showError } = useNotification();
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -21,9 +25,9 @@ export default function Profile() {
       <div className="profile-container">
         <div className="profile-card">
           <div className="profile-content">
-            <div className="error" style={{ padding: '40px', textAlign: 'center', color: '#f44336' }}>
-              Unable to load profile data. Please log in again.
-            </div>
+            {/* <div className="error" style={{ padding: '40px', textAlign: 'center', color: '#f44336' }}> */}
+              Loading...
+            {/* </div> */}
           </div>
         </div>
       </div>
