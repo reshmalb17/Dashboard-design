@@ -6,14 +6,29 @@ import './Profile.css';
 import profileImg from '../assets/profileImg.png'
 
 export default function Profile() {
-  const { userEmail, member } = useMemberstack();
+  // All hooks must be called before any conditional returns (Rules of Hooks)
+  const { userEmail } = useMemberstack(); // Get email from login
   const { showSuccess, showError } = useNotification();
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Get user name from member data or use email as fallback
-  const userName = member?.name || member?.data?.name || 'User';
-  const displayEmail = userEmail || 'Email@example.com';
-  const paymentId = member?.payment_id || member?.data?.payment_id || 'Payment ID';
+  // Extract user details from email (available after login)
+  const userName = userEmail ? userEmail.split('@')[0] : 'User';
+  const displayEmail = userEmail || 'N/A';
+
+  // If we have no email, show error
+  if (!userEmail) {
+    return (
+      <div className="profile-container">
+        <div className="profile-card">
+          <div className="profile-content">
+            <div className="error" style={{ padding: '40px', textAlign: 'center', color: '#f44336' }}>
+              Unable to load profile data. Please log in again.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const handleLogout = async () => {
     try {
@@ -48,25 +63,9 @@ export default function Profile() {
   return (
     <div className="profile-container">
       <div className="profile-card">
-        {/* <div className="profile-header">
-          <h1 className="profile-title">Profile</h1>
-          <button
-            className="profile-delete-btn"
-            onClick={handleDeleteAccount}
-            disabled={isDeleting}
-            title="Delete Account"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M2 4H14M12.6667 4V13.3333C12.6667 14 12 14.6667 11.3333 14.6667H4.66667C4 14.6667 3.33333 14 3.33333 13.3333V4M5.33333 4V2.66667C5.33333 2 6 1.33333 6.66667 1.33333H9.33333C10 1.33333 10.6667 2 10.6667 2.66667V4" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M6.66667 7.33333V11.3333M9.33333 7.33333V11.3333" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round"/>
-            </svg>
-            <span>Delete Account</span>
-          </button>
-        </div> */}
-
         <div className="profile-content">
           <div className="profile-avatar">
-        <img src={profileImg} alt="Profile" />
+            <img src={profileImg} alt="Profile" />
           </div>
 
           <div className="profile-details">
@@ -91,11 +90,10 @@ export default function Profile() {
             onClick={handleLogout}
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M8.90002 7.56023C9.21002 3.96023 11.06 2.49023 15.11 2.49023H15.24C19.71 2.49023 21.5 4.28023 21.5 8.75023V15.2702C21.5 19.7402 19.71 21.5302 15.24 21.5302H15.11C11.09 21.5302 9.24002 20.0802 8.91002 16.5402" stroke="#262E84" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M15 12H3.62" stroke="#262E84" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M5.85 8.6499L2.5 11.9999L5.85 15.3499" stroke="#262E84" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>
-
+              <path d="M8.90002 7.56023C9.21002 3.96023 11.06 2.49023 15.11 2.49023H15.24C19.71 2.49023 21.5 4.28023 21.5 8.75023V15.2702C21.5 19.7402 19.71 21.5302 15.24 21.5302H15.11C11.09 21.5302 9.24002 20.0802 8.91002 16.5402" stroke="#262E84" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M15 12H3.62" stroke="#262E84" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M5.85 8.6499L2.5 11.9999L5.85 15.3499" stroke="#262E84" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
             <span>Logout</span>
           </button>
         </div>
@@ -103,4 +101,3 @@ export default function Profile() {
     </div>
   );
 }
-

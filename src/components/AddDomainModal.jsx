@@ -1,16 +1,18 @@
 import { useState } from 'react';
 import { useNotification } from '../hooks/useNotification';
+import {  createSiteCheckout } from '../services/api';
 import './AddDomainModal.css';
 
-export default function AddDomainModal({ isOpen, onClose }) {
-  const [domains, setDomains] = useState(['www.domain.com', 'www.domain.com', 'www.domain.com', 'www.domain.com', 'www.domain.com']);
-  const [confirmedDomains, setConfirmedDomains] = useState(new Set([0, 1, 2, 3])); // First 4 are confirmed
+export default function AddDomainModal({ isOpen, onClose, userEmail }) {
+  const [domains, setDomains] = useState(['']);
+  const [confirmedDomains, setConfirmedDomains] = useState(new Set());
   const [billingCycle, setBillingCycle] = useState('Monthly');
+  const [isProcessing, setIsProcessing] = useState(false);
   const { showSuccess, showError } = useNotification();
 
-  // Pricing (example - adjust based on your pricing structure)
-  const monthlyPrice = 3.4; // per domain
-  const yearlyPrice = 2.72; // per domain (20% discount)
+  // Pricing
+  const monthlyPrice = 8; // per domain
+  const yearlyPrice = 72; // per domain
   
   // Calculate price based on confirmed domains only
   const confirmedCount = confirmedDomains.size;
@@ -25,7 +27,7 @@ export default function AddDomainModal({ isOpen, onClose }) {
   };
 
   const handleAddDomain = () => {
-    setDomains([...domains, 'www.domain.com']);
+    setDomains([...domains, '']);
   };
 
   const handleToggleConfirm = (index) => {
@@ -37,24 +39,53 @@ export default function AddDomainModal({ isOpen, onClose }) {
     }
     setConfirmedDomains(newConfirmed);
   };
+const handlePayNow = async () => {
+  // Validate user is logged in
+  if (!userEmail) {
+    showError('Please log in to add sites');
+    return;
+  }
 
-  const handlePayNow = () => {
-    // Validate domains - only count confirmed domains
-    const validDomains = domains.filter((domain, index) => 
-      domain.trim() && 
-      domain !== 'www.domain.com' && 
-      confirmedDomains.has(index)
-    );
-    
-    if (validDomains.length === 0) {
-      showError('Please confirm at least one valid domain');
-      return;
+  // Build valid sites from domains input
+  const sites = domains
+    .map(d => d.trim())
+    .filter(trimmed => trimmed && trimmed !== 'www.domain.com');
+
+  if (!sites.length) {
+    showError('Please enter at least one valid domain');
+    return;
+  }
+
+  setIsProcessing(true);
+
+  try {
+    const billingPeriod = billingCycle.toLowerCase(); // 'monthly' or 'yearly'
+
+    // Call the create-site-checkout endpoint
+    const response = await createSiteCheckout(userEmail, sites, billingPeriod);
+
+    // Check if checkout_url is returned
+    if (response && response.checkout_url) {
+      // Optional: store info for when user returns
+      sessionStorage.setItem('pendingSitesPurchase', JSON.stringify({
+        sites,
+        billingPeriod,
+        timestamp: Date.now(),
+      }));
+
+      // Redirect user to Stripe checkout
+      window.location.href = response.checkout_url;
+    } else {
+      showError('Failed to create checkout session. Please try again.');
+      setIsProcessing(false);
     }
+  } catch (error) {
+    const errorMessage = error.message || error.error || 'Failed to process payment. Please try again.';
+    showError(errorMessage);
+    setIsProcessing(false);
+  }
+};
 
-    // Here you would typically integrate with payment gateway
-    showSuccess(`Processing payment for ${validDomains.length} domain(s) - $${totalPrice}`);
-    onClose();
-  };
 
   if (!isOpen) return null;
 
@@ -152,8 +183,9 @@ export default function AddDomainModal({ isOpen, onClose }) {
           <button
             className="add-domain-pay-btn"
             onClick={handlePayNow}
+            disabled={isProcessing}
           >
-            Pay Now
+            {isProcessing ? 'Processing...' : 'Pay Now'}
           </button>
         </div>
           </div>

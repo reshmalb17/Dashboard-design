@@ -299,6 +299,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  position: relative;
+}
+
+.domain-cell-content button {
+  position: relative;
+  z-index: 100;
 }
 
 /* Source Tags */
@@ -339,12 +345,49 @@
   color: #065F46;
 }
 
+.status-tag-cancelled {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+.status-tag-cancelling {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+.status-tag-expired {
+  background: #F3F4F6;
+  color: #374151;
+}
+
+.status-tag-inactive {
+  background: #F3F4F6;
+  color: #6B7280;
+}
+
 .status-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: #10B981;
   flex-shrink: 0;
+}
+
+/* Cancelled status - red dot */
+.status-tag-cancelled .status-dot,
+.status-tag-cancelling .status-dot {
+  background: #EF4444 !important;
+}
+
+/* Expired/Inactive status - gray dot */
+.status-tag-expired .status-dot,
+.status-tag-inactive .status-dot {
+  background: #6B7280 !important;
+}
+
+/* Active status - green dot (explicit for clarity) */
+.status-tag-active .status-dot {
+  background: #10B981 !important;
 }
 
 .status-text {
@@ -383,7 +426,7 @@
 }
 
 .license-key-copy {
-  display: flex;
+  display: inline-flex !important;
   align-items: center;
   justify-content: center;
   width: 24px;
@@ -394,10 +437,37 @@
   padding: 0;
   flex-shrink: 0;
   transition: opacity 0.2s;
+  position: relative;
+  z-index: 100;
+  pointer-events: auto !important;
+  margin: 0;
 }
 
-.license-key-copy:hover {
+.license-key-copy:hover:not(:disabled) {
   opacity: 0.7;
+}
+
+.license-key-copy:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.domain-license-key {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.domain-license-key * {
+  pointer-events: auto;
+}
+
+.license-key-text {
+  flex: 1;
+  font-size: 14px;
 }
 
 /* Actions */

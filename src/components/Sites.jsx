@@ -1,41 +1,11 @@
-import { useState, useRef, useEffect } from "react";
-import { useAddSite, useRemoveSite } from "../hooks/useDashboardQueries";
-import { useNotification } from "../hooks/useNotification";
-import "./Sites.css";
-
-// Mock domain data for design
-const mockDomains = [
-  {
-    id: "1",
-    domain: "www.Caspian.com",
-    source: "Direct payment",
-    status: "Active",
-    billingPeriod: "Yearly",
-    expirationDate: "N/A",
-    licenseKey: "KEY-GN5B-PUH8-7NLK",
-    created: "12/12/26",
-  },
-  {
-    id: "2",
-    domain: "www.Caspianv1.com",
-    source: "License Key",
-    status: "Active",
-    billingPeriod: "Monthly",
-    expirationDate: "12/12/26",
-    licenseKey: "KEY-GN5B-PUH8-7NLK",
-    created: "12/12/26",
-  },
-  {
-    id: "3",
-    domain: "www.Caspian-test.com",
-    source: "Direct payment",
-    status: "Active",
-    billingPeriod: "Yearly",
-    expirationDate: "12/12/26",
-    licenseKey: "KEY-GN5B-PUH8-7NLK",
-    created: "12/12/26",
-  },
-];
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { useAddSite, useRemoveSite } from '../hooks/useDashboardQueries';
+import { useNotification } from '../hooks/useNotification';
+import { cancelSubscription } from '../services/api';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../hooks/useDashboardQueries';
+import { useMemberstack } from '../hooks/useMemberstack';
+import './Sites.css';
 
 // Status dropdown options with colors
 const statusOptions = [
@@ -148,9 +118,8 @@ function StatusDropdown({ value, onChange }) {
   );
 }
 
-export default function Sites({ sites, userEmail }) {
-  const [domains, setDomains] = useState(mockDomains);
-  const [searchQuery, setSearchQuery] = useState("");
+export default function Sites({ sites, subscriptions = {}, licenses = [], userEmail, isPolling = false }) {
+  const [searchQuery, setSearchQuery] = useState('');
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [filters, setFilters] = useState({
     source: "",
@@ -160,9 +129,332 @@ export default function Sites({ sites, userEmail }) {
     created: "",
   });
   const [contextMenu, setContextMenu] = useState(null);
+  const [visibleLicenseKeys, setVisibleLicenseKeys] = useState({});
+  const [isCancelling, setIsCancelling] = useState(false);
   const contextMenuRef = useRef(null);
   const searchInputRef = useRef(null);
   const { showSuccess, showError } = useNotification();
+  const queryClient = useQueryClient();
+  const { userEmail: memberstackEmail } = useMemberstack();
+  const effectiveUserEmail = userEmail || memberstackEmail;
+
+  // Convert sites object and subscriptions to domains array format
+  // Process both sites object and subscriptions (like Dashboard does)
+  // Only show Direct payment and Site payment (exclude License Key)
+  const domains = useMemo(() => {
+    const allDomains = [];
+    
+    // Process subscriptions first (like Dashboard does)
+    const subscriptionsArray = Array.isArray(subscriptions) 
+      ? subscriptions 
+      : Object.values(subscriptions || {});
+    
+    subscriptionsArray.forEach(subscription => {
+      if (!subscription || !subscription.items || !Array.isArray(subscription.items)) {
+        return;
+      }
+      
+      const subscriptionId = subscription.subscriptionId || subscription.id;
+      
+      subscription.items.forEach((item, itemIndex) => {
+        const siteDomain = item.site || item.site_domain;
+        if (!siteDomain || siteDomain.trim() === '') {
+          return;
+        }
+        
+        // Skip placeholder sites
+        if (siteDomain.startsWith('site_') && /^site_\d+$/.test(siteDomain)) {
+          return;
+        }
+        if ((siteDomain.startsWith('license_') || siteDomain.startsWith('quantity_')) && !item.isActivated) {
+          return;
+        }
+        
+        // Determine source
+        const source = item.purchase_type === 'quantity' && item.isActivated 
+          ? 'License Key' 
+          : 'Direct payment';
+        
+        // Skip License Key items in Domain section
+        if (source === 'License Key') {
+          return;
+        }
+        
+        // Determine status
+        let status = 'Active';
+        if (item.status === 'inactive' || item.status === 'cancelled') {
+          status = 'Cancelled';
+        } else if (subscription.status === 'cancelled' || subscription.cancel_at_period_end) {
+          if (subscription.current_period_end && subscription.current_period_end < Math.floor(Date.now() / 1000)) {
+            status = 'Cancelled';
+          } else {
+            status = 'Cancelling';
+          }
+        } else if (item.status === 'expired') {
+          status = 'Expired';
+        }
+        
+        // Get billing period
+        let billingPeriod = 'N/A';
+        if (subscription.billingPeriod) {
+          const period = subscription.billingPeriod.toLowerCase().trim();
+          if (period.endsWith('ly')) {
+            billingPeriod = period.charAt(0).toUpperCase() + period.slice(1);
+          } else {
+            billingPeriod = period.charAt(0).toUpperCase() + period.slice(1) + 'ly';
+          }
+        }
+        
+        // Get expiration date
+        let expirationDate = 'N/A';
+        const renewalDate = item.renewal_date || subscription.current_period_end;
+        if (renewalDate) {
+          try {
+            const timestamp = typeof renewalDate === 'number' ? renewalDate : parseInt(renewalDate);
+            const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+            expirationDate = new Date(dateInMs).toLocaleDateString();
+          } catch (e) {
+            expirationDate = 'N/A';
+          }
+        }
+        
+        // Get created date
+        let created = 'N/A';
+        const createdAt = item.created_at || subscription.created_at;
+        if (createdAt) {
+          try {
+            const timestamp = typeof createdAt === 'number' ? createdAt : parseInt(createdAt);
+            const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+            created = new Date(dateInMs).toLocaleDateString();
+          } catch (e) {
+            created = 'N/A';
+          }
+        }
+        
+        // Get site name from sites object if available
+        const siteData = sites[siteDomain];
+        const siteName = siteData?.name || siteData?.site_name || siteDomain;
+        
+        allDomains.push({
+          id: subscriptionId ? `${subscriptionId}_${itemIndex}` : `sub_${itemIndex}_${siteDomain}`,
+          domain: siteDomain,
+          siteName: siteName,
+          source: source,
+          status: status,
+          billingPeriod: billingPeriod,
+          expirationDate: expirationDate,
+          licenseKey: item.license_key || 'N/A',
+          created: created,
+          subscriptionId: subscriptionId,
+        });
+      });
+    });
+    
+    // Also process sites object (for any sites not in subscriptions)
+    if (sites && Object.keys(sites).length > 0) {
+      const processedDomains = Object.entries(sites)
+      .map(([domain, siteData]) => {
+      // Get site name from site data
+      const siteName = siteData?.name || siteData?.site_name || domain;
+      
+      // Format dates
+      let expirationDate = 'N/A';
+      if (siteData.expiration_date || siteData.renewal_date) {
+        try {
+          const timestamp = typeof (siteData.expiration_date || siteData.renewal_date) === 'number' 
+            ? (siteData.expiration_date || siteData.renewal_date)
+            : parseInt(siteData.expiration_date || siteData.renewal_date);
+          const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+          expirationDate = new Date(dateInMs).toLocaleDateString();
+        } catch (e) {
+          expirationDate = 'N/A';
+        }
+      }
+
+      let created = 'N/A';
+      if (siteData.created_at) {
+        try {
+          const timestamp = typeof siteData.created_at === 'number' 
+            ? siteData.created_at 
+            : parseInt(siteData.created_at);
+          const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+          created = new Date(dateInMs).toLocaleDateString();
+        } catch (e) {
+          created = 'N/A';
+        }
+      }
+
+      // Format billing period
+      let billingPeriod = 'N/A';
+      if (siteData.billing_period) {
+        const period = siteData.billing_period.toLowerCase().trim();
+        if (period.endsWith('ly')) {
+          billingPeriod = period.charAt(0).toUpperCase() + period.slice(1);
+        } else {
+          billingPeriod = period.charAt(0).toUpperCase() + period.slice(1) + 'ly';
+        }
+      }
+
+      // Determine status - prioritize expired, then cancelled, then check expiration date
+      let status = 'Active';
+      if (siteData.status) {
+        const statusLower = siteData.status.toLowerCase().trim();
+        
+        // Check for expired first
+        if (statusLower === 'expired') {
+          status = 'Expired';
+        } 
+        // Check for cancelled/canceling
+        else if (statusLower === 'cancelled' || statusLower === 'canceled' || statusLower === 'cancelling' || statusLower === 'canceling') {
+          // Check if it's actually expired based on expiration date
+          if (siteData.expiration_date || siteData.renewal_date) {
+            try {
+              const timestamp = typeof (siteData.expiration_date || siteData.renewal_date) === 'number' 
+                ? (siteData.expiration_date || siteData.renewal_date)
+                : parseInt(siteData.expiration_date || siteData.renewal_date);
+              const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+              const expirationDateObj = new Date(dateInMs);
+              const now = new Date();
+              if (expirationDateObj < now) {
+                status = 'Expired';
+              } else if (statusLower === 'cancelling' || statusLower === 'canceling') {
+                status = 'Cancelling';
+              } else {
+                status = 'Cancelled';
+              }
+            } catch (e) {
+              // If date parsing fails, use the status from backend
+              if (statusLower === 'cancelling' || statusLower === 'canceling') {
+                status = 'Cancelling';
+              } else {
+                status = 'Cancelled';
+              }
+            }
+          } else {
+            // No expiration date, use status from backend
+            if (statusLower === 'cancelling' || statusLower === 'canceling') {
+              status = 'Cancelling';
+            } else {
+              status = 'Cancelled';
+            }
+          }
+        }
+        // Check for inactive - might be expired or cancelled
+        else if (statusLower === 'inactive') {
+          // Check if it's actually expired based on expiration date
+          if (siteData.expiration_date || siteData.renewal_date) {
+            try {
+              const timestamp = typeof (siteData.expiration_date || siteData.renewal_date) === 'number' 
+                ? (siteData.expiration_date || siteData.renewal_date)
+                : parseInt(siteData.expiration_date || siteData.renewal_date);
+              const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+              const expirationDateObj = new Date(dateInMs);
+              const now = new Date();
+              if (expirationDateObj < now) {
+                status = 'Expired';
+              } else {
+                // Inactive but not expired - check if it's cancelled
+                // If there's a cancel_at or canceled_at field, it's cancelled
+                if (siteData.cancel_at || siteData.canceled_at || siteData.cancel_at_period_end) {
+                  status = 'Cancelled';
+                } else {
+                  status = 'Inactive';
+                }
+              }
+            } catch (e) {
+              // If date parsing fails, check for cancel indicators
+              if (siteData.cancel_at || siteData.canceled_at || siteData.cancel_at_period_end) {
+                status = 'Cancelled';
+              } else {
+                status = 'Inactive';
+              }
+            }
+          } else {
+            // No expiration date, check for cancel indicators
+            if (siteData.cancel_at || siteData.canceled_at || siteData.cancel_at_period_end) {
+              status = 'Cancelled';
+            } else {
+              status = 'Inactive';
+            }
+          }
+        } 
+        // For other statuses, capitalize first letter
+        else {
+          status = siteData.status.charAt(0).toUpperCase() + siteData.status.slice(1);
+        }
+      } else {
+        // If no status, check expiration date
+        if (siteData.expiration_date || siteData.renewal_date) {
+          try {
+            const timestamp = typeof (siteData.expiration_date || siteData.renewal_date) === 'number' 
+              ? (siteData.expiration_date || siteData.renewal_date)
+              : parseInt(siteData.expiration_date || siteData.renewal_date);
+            const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+            const expirationDateObj = new Date(dateInMs);
+            const now = new Date();
+            if (expirationDateObj < now) {
+              status = 'Expired';
+            }
+          } catch (e) {
+            // Keep as Active if date parsing fails
+          }
+        }
+      }
+
+      return {
+        id: domain,
+        domain: domain,
+        siteName: siteName, // Add site name from response
+        source: siteData.source || 'Direct payment',
+        status: status,
+        billingPeriod: billingPeriod,
+        expirationDate: expirationDate,
+        licenseKey: siteData.license_key || 'N/A',
+        created: created,
+        subscriptionId: siteData.subscription_id || siteData.subscriptionId || null,
+      };
+      })
+      .filter(domain => {
+        // Show Direct payment, Site payment, and Site purchase - exclude License Key
+        const source = domain.source || '';
+        
+        // Exclude License Key items - check multiple conditions
+        if (source === 'License Key' || 
+            source.toLowerCase().includes('license') ||
+            (domain.licenseKey && domain.licenseKey !== 'N/A' && domain.licenseKey.startsWith('KEY-'))) {
+          return false;
+        }
+        
+        // Show Direct payment, Site payment, Site purchase, or empty source
+        // Include all statuses (Active, Cancelled, Expired, etc.)
+        return source === 'Direct payment' || 
+               source === 'Site payment' || 
+               source === 'Site purchase' ||
+               source.toLowerCase().includes('site purchase') ||
+               source === '';
+      })
+      .forEach(domain => {
+        // Check if domain already exists from subscriptions
+        const exists = allDomains.some(d => d.domain.toLowerCase().trim() === domain.domain.toLowerCase().trim());
+        if (!exists) {
+          allDomains.push(domain);
+        }
+      });
+    }
+    
+    // Remove duplicates based on domain name (case-insensitive)
+    const uniqueDomains = [];
+    const seenDomains = new Set();
+    allDomains.forEach(domain => {
+      const domainKey = domain.domain.toLowerCase().trim();
+      if (!seenDomains.has(domainKey)) {
+        seenDomains.add(domainKey);
+        uniqueDomains.push(domain);
+      }
+    });
+    
+    return uniqueDomains;
+  }, [sites, subscriptions, licenses]);
 
   // Close context menu when clicking outside
   useEffect(() => {
@@ -218,18 +510,61 @@ const handleContextMenu = (e, domainId) => {
     left = 8;
   }
 
-  setContextMenu({
-    domainId,
-    top,
-    left,
-  });
-};
+    setContextMenu({
+      domainId,
+      top: rect.bottom + 6, // below button
+      left: rect.left - 180, // open to the left
+    });
+  };
 
+  const [copiedKey, setCopiedKey] = useState(null);
 
-  const handleCopyLicenseKey = (licenseKey) => {
-    navigator.clipboard.writeText(licenseKey);
-    showSuccess("License key copied to clipboard");
-    setContextMenu(null);
+  const handleCopyLicenseKey = async (licenseKey) => {
+    if (!licenseKey || licenseKey === 'N/A' || String(licenseKey).trim() === '') {
+      showError('No license key to copy');
+      return;
+    }
+    
+    const keyToCopy = String(licenseKey).trim();
+    
+    try {
+      // Use modern clipboard API
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(keyToCopy);
+      } else {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = keyToCopy;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+          const success = document.execCommand('copy');
+          if (!success) {
+            throw new Error('execCommand copy returned false');
+          }
+        } catch (err) {
+          throw err;
+        }
+        document.body.removeChild(textArea);
+      }
+      
+      // Show feedback
+      setCopiedKey(keyToCopy);
+      showSuccess("License key copied to clipboard");
+      setTimeout(() => {
+        setCopiedKey(null);
+      }, 2000);
+      if (contextMenu) {
+        setContextMenu(null);
+      }
+    } catch (err) {
+      showError('Failed to copy license key');
+    }
   };
 
   const handleDeleteDomain = (domainId) => {
@@ -250,27 +585,29 @@ const handleContextMenu = (e, domainId) => {
     });
   };
 
-  const filteredDomains = domains.filter((domain) => {
-    // Search filter
-    if (
-      searchQuery &&
-      !domain.domain.toLowerCase().includes(searchQuery.toLowerCase())
-    ) {
-      return false;
-    }
-    // Other filters
-    if (filters.source && domain.source !== filters.source) return false;
-    if (filters.status && domain.status !== filters.status) return false;
-    if (filters.billingPeriod && domain.billingPeriod !== filters.billingPeriod)
-      return false;
-    if (
-      filters.expirationDate &&
-      domain.expirationDate !== filters.expirationDate
-    )
-      return false;
-    if (filters.created && domain.created !== filters.created) return false;
-    return true;
-  });
+  const filteredDomains = useMemo(() => {
+    const filtered = domains.filter(domain => {
+      // Search filter - search in both domain and site name
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesDomain = domain.domain.toLowerCase().includes(query);
+        const matchesSiteName = (domain.siteName || '').toLowerCase().includes(query);
+        if (!matchesDomain && !matchesSiteName) {
+          return false;
+        }
+      }
+      // Other filters
+      if (filters.source && domain.source !== filters.source) return false;
+      // Only filter by status if a status is explicitly selected (not empty string)
+      if (filters.status && filters.status.trim() !== '' && domain.status !== filters.status) return false;
+      if (filters.billingPeriod && domain.billingPeriod !== filters.billingPeriod) return false;
+      if (filters.expirationDate && domain.expirationDate !== filters.expirationDate) return false;
+      if (filters.created && domain.created !== filters.created) return false;
+      return true;
+    });
+    
+    return filtered;
+  }, [domains, searchQuery, filters]);
 
   const hasActiveFilters = Object.values(filters).some((v) => v !== "");
 
@@ -289,6 +626,53 @@ const handleContextMenu = (e, domainId) => {
     }
   };
 
+  const handleCancelSubscription = async (subscriptionId, domainName, siteDomain) => {
+    if (isCancelling) {
+      return; // Prevent multiple clicks
+    }
+
+    if (!effectiveUserEmail) {
+      showError('User email not found. Please refresh the page.');
+      return;
+    }
+
+    if (!subscriptionId) {
+      showError('Subscription ID not found.');
+      return;
+    }
+
+    if (!siteDomain) {
+      showError('Site domain not found.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to cancel the subscription for "${domainName}"? This will cancel the entire subscription and all sites in it. The subscription will remain active until the end of the current billing period.`
+    );
+
+    if (!confirmed) {
+      setContextMenu(null);
+      return;
+    }
+
+    setIsCancelling(true);
+    setContextMenu(null); // Close menu immediately
+
+    try {
+      const response = await cancelSubscription(effectiveUserEmail, siteDomain, subscriptionId);
+      const message = response.message || 'Subscription cancelled successfully. The subscription will remain active until the end of the current billing period.';
+      showSuccess(message);
+      
+      // Refresh dashboard data
+      await queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(effectiveUserEmail) });
+    } catch (error) {
+      const errorMessage = error.message || error.error || 'Unknown error';
+      showError('Failed to cancel subscription: ' + errorMessage);
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   // Keep search expanded if there's a query
   useEffect(() => {
     if (searchQuery.trim()) {
@@ -300,7 +684,20 @@ const handleContextMenu = (e, domainId) => {
     <div className="domains-container">
       {/* Header */}
       <div className="domains-header">
-        <h1 className="domains-title">Domains</h1>
+        <h1 className="domains-title">
+          Domains
+          {isPolling && (
+            <span style={{ 
+              marginLeft: '10px', 
+              fontSize: '14px', 
+              color: '#666', 
+              fontWeight: 'normal',
+              fontStyle: 'italic'
+            }}>
+              (Processing new domains...)
+            </span>
+          )}
+        </h1>
         <div
           className={`domains-search-wrapper ${
             isSearchExpanded ? "expanded" : ""
@@ -360,6 +757,9 @@ const handleContextMenu = (e, domainId) => {
           <option value="">Source</option>
           <option value="Direct payment">Direct payment</option>
           <option value="License Key">License Key</option>
+        </select> */}
+        {/* <select
+          <option value="Site payment">Site payment</option>
         </select> */}
 
         <StatusDropdown
@@ -447,7 +847,9 @@ const handleContextMenu = (e, domainId) => {
             {filteredDomains.map((domain) => (
               <tr key={domain.id}>
                 <td>
-                  <div className="domain-cell-content">{domain.domain}</div>
+                  <div className="domain-cell-content">
+                    {domain.siteName || domain.domain}
+                  </div>
                 </td>
                 {/* <td>
                   <div className="domain-cell-content">
@@ -464,7 +866,7 @@ const handleContextMenu = (e, domainId) => {
                 </td> */}
                 <td>
                   <div className="domain-cell-content">
-                    <span className="status-tag status-tag-active">
+                    <span className={`status-tag status-tag-${(domain.status || 'active').toLowerCase().trim()}`}>
                       <span className="status-dot" />
                       <span className="status-text">{domain.status}</span>
                     </span>
@@ -494,33 +896,65 @@ const handleContextMenu = (e, domainId) => {
                       {domain.licenseKey}
                     </span>
                     <button
+                      type="button"
                       className="license-key-copy"
-                      onClick={() => handleCopyLicenseKey(domain.licenseKey)}
-                      title="Copy License Key"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (domain.licenseKey && domain.licenseKey !== 'N/A') {
+                          handleCopyLicenseKey(domain.licenseKey);
+                        }
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onMouseUp={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      title={copiedKey === domain.licenseKey ? "Copied!" : "Copy license key"}
+                      disabled={domain.licenseKey === 'N/A' || !domain.licenseKey}
+                      style={{
+                        opacity: copiedKey === domain.licenseKey ? 0.6 : (domain.licenseKey === 'N/A' || !domain.licenseKey ? 0.5 : 1),
+                        cursor: (domain.licenseKey === 'N/A' || !domain.licenseKey) ? 'not-allowed' : 'pointer',
+                        pointerEvents: (domain.licenseKey === 'N/A' || !domain.licenseKey) ? 'none' : 'auto',
+                        minWidth: '24px',
+                        minHeight: '24px',
+                        position: 'relative',
+                        zIndex: 100
+                      }}
                     >
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
-                        <rect width="16" height="16" rx="3" fill="#DEE8F4" />
-                        <path
-                          d="M9.7333 8.46752V10.1825C9.7333 11.6117 9.16163 12.1834 7.73245 12.1834H6.01745C4.58827 12.1834 4.0166 11.6117 4.0166 10.1825V8.46752C4.0166 7.03834 4.58827 6.46667 6.01745 6.46667H7.73245C9.16163 6.46667 9.7333 7.03834 9.7333 8.46752Z"
-                          stroke="#292D32"
-                          stroke-width="1.5"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                        />
-                        <path
-                          d="M12.1835 6.01751V7.73251C12.1835 9.16169 11.6118 9.73336 10.1826 9.73336H9.73348V8.46752C9.73348 7.03834 9.16181 6.46667 7.73264 6.46667H6.4668V6.01751C6.4668 4.58833 7.03847 4.01666 8.46764 4.01666H10.1826C11.6118 4.01666 12.1835 4.58833 12.1835 6.01751Z"
-                          stroke="#292D32"
-                          stroke-width="1.5"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                        />
-                      </svg>
+                      {copiedKey === domain.licenseKey ? (
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <rect width="16" height="16" rx="3" fill="#10B981" />
+                          <path d="M4 8L6.5 10.5L12 5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      ) : (
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <rect width="16" height="16" rx="3" fill="#DEE8F4" />
+                          <path
+                            d="M9.7333 8.46752V10.1825C9.7333 11.6117 9.16163 12.1834 7.73245 12.1834H6.01745C4.58827 12.1834 4.0166 11.6117 4.0166 10.1825V8.46752C4.0166 7.03834 4.58827 6.46667 6.01745 6.46667H7.73245C9.16163 6.46667 9.7333 7.03834 9.7333 8.46752Z"
+                            stroke="#292D32"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <path
+                            d="M12.1835 6.01751V7.73251C12.1835 9.16169 11.6118 9.73336 10.1826 9.73336H9.73348V8.46752C9.73348 7.03834 9.16181 6.46667 7.73264 6.46667H6.4668V6.01751C6.4668 4.58833 7.03847 4.01666 8.46764 4.01666H10.1826C11.6118 4.01666 12.1835 4.58833 12.1835 6.01751Z"
+                            stroke="#292D32"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      )}
                     </button>
                   </div>
                 </td>
@@ -552,9 +986,12 @@ const handleContextMenu = (e, domainId) => {
                       >
                         <button
                           className="context-menu-item"
-                          onClick={() =>
-                            handleCopyLicenseKey(domain.licenseKey)
-                          }
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleCopyLicenseKey(domain.licenseKey);
+                            setContextMenu(null);
+                          }}
                         >
                           <svg
                             width="16"
@@ -586,6 +1023,21 @@ const handleContextMenu = (e, domainId) => {
                           </svg>
                           Copy License key
                         </button>
+                        {domain.source === 'Direct payment' && domain.subscriptionId && 
+                         domain.status !== 'Cancelled' && 
+                         domain.status !== 'Expired' && 
+                         domain.status !== 'Cancelling' && (
+                          <button
+                            className="context-menu-item context-menu-item-danger"
+                            onClick={() => handleCancelSubscription(domain.subscriptionId, domain.siteName || domain.domain, domain.domain)}
+                            disabled={isCancelling}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M12 4L4 12M4 4L12 12" stroke="#EF4444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                            <span>{isCancelling ? 'Cancelling...' : 'Cancel Subscription'}</span>
+                          </button>
+                        )}
                         <button
                         style={{color:"#0A091F80"}}
                           className="context-menu-item context-menu-item-danger"
@@ -649,5 +1101,6 @@ const handleContextMenu = (e, domainId) => {
         </table>
       </div>
     </div>
+    
   );
 }
