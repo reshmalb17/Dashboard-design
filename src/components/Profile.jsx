@@ -5,9 +5,9 @@ import { useNotification } from '../hooks/useNotification';
 import './Profile.css';
 import profileImg from '../assets/profileImg.png'
 
-export default function Profile() {
+export default function Profile({ userEmail }) {
   // All hooks must be called before any conditional returns (Rules of Hooks)
-  const { userEmail } = useMemberstack(); // Get email from login
+  // const { userEmail } = useMemberstack(); // Get email from login
   const { showSuccess, showError } = useNotification();
   const [isDeleting, setIsDeleting] = useState(false);
 

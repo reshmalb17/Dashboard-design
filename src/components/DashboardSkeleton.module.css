@@ -1,0 +1,205 @@
+/* Keyframe animation for skeleton loading */
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+/* Dashboard Section */
+.dashboardSection {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Stats Grid */
+.dashboardStats {
+  display: grid;
+  grid-template-columns: 359px 1fr 1fr;
+  grid-template-rows: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.statCardSkeleton {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid #8b77f94d;
+}
+
+.statCardSkeleton.skeletonLarge {
+  grid-row: span 2;
+}
+
+/* Skeleton Text Elements */
+.skeletonText {
+  background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite;
+  border-radius: 6px;
+}
+
+.skeletonLabel {
+  height: 20px;
+  width: 60%;
+  margin-bottom: 8px;
+}
+
+.skeletonValue {
+  height: 48px;
+  width: 80%;
+  margin-bottom: 12px;
+}
+
+.skeletonIcon {
+  height: 24px;
+  width: 24px;
+  background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite;
+  border-radius: 4px;
+}
+
+/* Recent Domains Section */
+.recentDomainsSection {
+  border-radius: 12px;
+}
+
+.recentDomainsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.skeletonTitle {
+  height: 24px;
+  width: 150px;
+}
+
+.skeletonSearchIcon {
+  width: 40px;
+  height: 40px;
+}
+
+/* Table Skeleton */
+.recentDomainsTableContainer {
+  overflow-x: auto;
+}
+
+.recentDomainsTable {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.recentDomainsTable thead {
+  background: #f2f7ff;
+}
+
+.recentDomainsTable th {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+  border-bottom: 1px solid #e5e7eb;
+  color: #0a091f;
+}
+
+.recentDomainsTable tbody tr {
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.recentDomainsTable tbody tr:last-child {
+  border-bottom: none;
+}
+
+.skeletonCell {
+  height: 16px;
+  width: 90%;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .dashboardStats {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto;
+  }
+
+  .statCardSkeleton.skeletonLarge {
+    grid-row: span 1;
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboardSection {
+    padding: 0px;
+  }
+
+  .dashboardStats {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .statCardSkeleton.skeletonLarge {
+    grid-row: span 1;
+  }
+
+  .recentDomainsTableContainer {
+    overflow-x: scroll;
+  }
+
+  .recentDomainsTable {
+    min-width: 800px;
+  }
+
+  .recentDomainsHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .skeletonTitle {
+    width: 100%;
+  }
+
+  .skeletonSearchIcon {
+    align-self: flex-end;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboardStats {
+    gap: 12px;
+  }
+
+  .statCardSkeleton {
+    padding: 16px;
+    min-height: 100px;
+  }
+
+  .skeletonLabel {
+    height: 16px;
+  }
+
+  .skeletonValue {
+    height: 40px;
+  }
+
+  .recentDomainsTable th,
+  .recentDomainsTable td {
+    padding: 10px 8px;
+    font-size: 12px;
+  }
+}
