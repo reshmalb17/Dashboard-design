@@ -12,58 +12,65 @@ export default function PurchaseLicenseModal({ isOpen, onClose }) {
   const { userEmail } = useMemberstack();
 
   // Pricing
-  const monthlyPrice = 8; // per license
-  const yearlyPrice = 72; // per license
-  
-  const totalPrice = billingCycle === 'Monthly' 
-    ? (quantity * monthlyPrice).toFixed(2)
-    : (quantity * yearlyPrice).toFixed(2);
+  const monthlyPrice = 8;  // per license
+  const yearlyPrice = 72;  // per license
+
+  const totalPrice =
+    billingCycle === 'Monthly'
+      ? (quantity * monthlyPrice).toFixed(2)
+      : (quantity * yearlyPrice).toFixed(2);
 
   const handleDecrease = () => {
-    if (quantity > 1) {
-      setQuantity(quantity - 1);
-    }
+    setQuantity((prev) => (prev > 1 ? prev - 1 : 1));
   };
 
   const handleIncrease = () => {
-    setQuantity(quantity + 1);
+    setQuantity((prev) => (prev < 100 ? prev + 1 : 100));
   };
 
-  const handleQuantityChange = (e) => {
-    const value = parseInt(e.target.value) || 1;
-    if (value >= 1) {
-      setQuantity(value);
-    }
-  };
+ const handleQuantityChange = (e) => {
+  const raw = e.target.value;
 
-  const handlePayNow = async () => {
+  if (raw === '') {
+    setQuantity('');
+    return;
+  }
+
+  const value = parseInt(raw, 10);
+  if (isNaN(value)) return;
+
+  if (value > 25) {
+    showError('Maximum 25 license keys per purchase');
+    setQuantity(25);
+  } else if (value < 1) {
+    setQuantity(1);
+  } else {
+    setQuantity(value);
+  }
+};
+
+const handlePayNow = async () => {
     // Validate user is logged in
     if (!userEmail) {
       showError('Please log in to purchase license keys');
       return;
     }
-
     // Validate quantity
     if (quantity < 1) {
       showError('Please select at least 1 license key');
       return;
     }
-
     // Validate quantity max (backend allows up to 25)
     if (quantity > 25) {
       showError('Maximum 25 license keys per purchase');
       return;
     }
-
     setIsProcessing(true);
-
     try {
       // Convert billing cycle to lowercase for API
       const billingPeriod = billingCycle.toLowerCase(); // 'monthly' or 'yearly'
-
       // Call the purchase-quantity endpoint
       const response = await purchaseQuantity(userEmail, quantity, billingPeriod);
-
       // Check if checkout_url is returned
       if (response && response.checkout_url) {
         // Store purchase info in sessionStorage for when user returns
@@ -72,7 +79,6 @@ export default function PurchaseLicenseModal({ isOpen, onClose }) {
           billingPeriod: billingCycle.toLowerCase(),
           timestamp: Date.now()
         }));
-        
         // Redirect user to Stripe checkout
         window.location.href = response.checkout_url;
       } else {
@@ -85,7 +91,12 @@ export default function PurchaseLicenseModal({ isOpen, onClose }) {
       setIsProcessing(false);
     }
   };
-
+//   const handleQuantityBlur = () => {
+//   let value = parseInt(quantity, 10);
+//   if (isNaN(value) || value < 1) value = 1;
+//   if (value > 100) value = 100;
+//   setQuantity(value);
+// };
 
   if (!isOpen) return null;
 
@@ -100,8 +111,19 @@ export default function PurchaseLicenseModal({ isOpen, onClose }) {
             onClick={onClose}
             title="Close"
           >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M15 5L5 15M5 5L15 15" stroke="#000" strokeWidth="2" strokeLinecap="round"/>
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 20 20"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M15 5L5 15M5 5L15 15"
+                stroke="#000"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
             </svg>
           </button>
         </div>
@@ -115,32 +137,77 @@ export default function PurchaseLicenseModal({ isOpen, onClose }) {
                 onClick={handleDecrease}
                 type="button"
               >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M8 12H16" stroke="#120F27" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M9 22H15C20 22 22 20 22 15V9C22 4 20 2 15 2H9C4 2 2 4 2 9V15C2 20 4 22 9 22Z" stroke="#120F27" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>
-
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M8 12H16"
+                    stroke="#120F27"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M9 22H15C20 22 22 20 22 15V9C22 4 20 2 15 2H9C4 2 2 4 2 9V15C2 20 4 22 9 22Z"
+                    stroke="#120F27"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </button>
+
               <input
                 type="number"
                 className="quantity-input"
                 value={quantity}
                 onChange={handleQuantityChange}
+                // onBlur={handleQuantityBlur}
                 min="1"
+                max="100"
               />
+
               <button
                 className="quantity-btn quantity-btn-increase"
                 onClick={handleIncrease}
                 type="button"
               >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M8 12H16" stroke="#120F27" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M12 16V8" stroke="#120F27" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M9 22H15C20 22 22 20 22 15V9C22 4 20 2 15 2H9C4 2 2 4 2 9V15C2 20 4 22 9 22Z" stroke="#120F27" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>
-
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M8 12H16"
+                    stroke="#120F27"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M12 16V8"
+                    stroke="#120F27"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M9 22H15C20 22 22 20 22 15V9C22 4 20 2 15 2H9C4 2 2 4 2 9V15C2 20 4 22 9 22Z"
+                    stroke="#120F27"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </button>
             </div>
+
             <button
               className="purchase-pay-btn"
               onClick={handlePayNow}
@@ -184,4 +251,3 @@ export default function PurchaseLicenseModal({ isOpen, onClose }) {
     </>
   );
 }
-
