@@ -289,6 +289,7 @@ useEffect(() => {
             </>
           )}
           </div>
+         
         </div>
       </div>
 
@@ -301,6 +302,9 @@ useEffect(() => {
         isOpen={addDomainModalOpen} 
         onClose={() => setAddDomainModalOpen(false)} 
       />
+        <footer className="app-footer">
+      © {new Date().getFullYear()} All rights reserved ConsentBit
+    </footer>
     </div>
   );
 }
