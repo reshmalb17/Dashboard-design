@@ -707,7 +707,17 @@ padding-top: 8px;
   margin-bottom: 15px;
   color: #333;
 }
+@media (max-width: 768px) {
+  .logo-image {
+    width: 225px;
+  }
+}
 
+@media (max-width: 480px) {
+  .logo-image {
+    width: 168px;
+  }
+}
 @media (max-width: 1024px) {
   .sidebar {
     width: 240px;
@@ -717,8 +727,36 @@ padding-top: 8px;
   .sidebar {
     width: 240px;
   }
+  .add-domain-modal-body{
+  flex-direction: column;
+}
+.add-domain-modal-left{
+  width: 100%;
+  padding: 20px!important;
+}
+.add-domain-modal-right{
+  width: 100%;
+}
+.add-domain-modal-right-card{
+max-width: unset;
+}
+
+
 }
 @media (max-width: 768px) {
+  .domain-input-wrapper{
+    max-width: 300px;
+  }
+  .domain-input-row{
+gap:2px;
+  }
+  .add-domain-modal-footer{
+  padding-top: 10px!important;
+  }
+  .add-domain-pay-btn{
+    padding: 12px 20px;
+    max-width: 100%;
+  }
   .licenses-tab{
     font-size: 10px;
         padding: 5px 8px;
@@ -741,24 +779,7 @@ padding-top: 8px;
   }
 .app-footer {
     width: 100%;
-    height: 40px;
-    /* padding-top: 12px; */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    left: 0;
-    position: fixed;
-    bottom: 0;
-    background: #030306;
-    backdrop-filter: blur(44px);
-    color: #fff;
-     z-index: 9999; 
-}
-}
-.app-footer {
-    width: 100%;
-    height: 40px;
+   
     /* padding-top: 12px; */
     display: flex;
     align-items: center;
@@ -770,5 +791,27 @@ padding-top: 8px;
     background: #030306;
     backdrop-filter: blur(44px);
     color: #fff;
-     z-index: 9999; 
+     z-index: 0!important; 
+     flex-direction: column;
+     padding: 10px !important; ;
+}
+
+}
+.app-footer {
+    width: 100%;
+    min-height: 40px;
+    /* padding-top: 12px; */
+   
+   padding: 0px 20px;
+    display: flex;
+    align-items: center;
+   justify-content: space-between;
+    font-size: 12px;
+    left: 0;
+    position: relative;
+    bottom: 0;
+    background: #030306;
+    backdrop-filter: blur(44px);
+    color: #fff;
+     z-index: 999; 
 }

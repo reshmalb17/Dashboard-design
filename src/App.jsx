@@ -328,7 +328,7 @@ useEffect(() => {
               <span>Purchase License Key</span>
             </button>}
 
-            <button
+            {/* <button
               className="header-btn header-btn-primary"
               onClick={() => setAddDomainModalOpen(true)}
             >
@@ -347,7 +347,7 @@ useEffect(() => {
                 />
               </svg>
               <span>Add New Domain</span>
-            </button>
+            </button> */}
           </div>
         </div>
       </div>
@@ -454,7 +454,8 @@ useEffect(() => {
         userEmail={userEmail || ''}
       />
         <footer className="app-footer">
-      © {new Date().getFullYear()} All rights reserved ConsentBit
+      <span>© {new Date().getFullYear()} All rights reserved ConsentBit</span>
+  <span className="footer-service">A service by Seattle New Media</span>
     </footer>
     </div>
   );
