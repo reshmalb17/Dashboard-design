@@ -1031,7 +1031,7 @@ useEffect(() => {
   </div>
 )}
 
-// ... existing code ...
+
 
       {/* Recent Domains Table */}
       <div className="recent-domains-section">
