@@ -568,14 +568,15 @@
   left: 0;
   right: auto;
   min-width: 133px;
-  padding: 8px 10px;
+  
   border-radius: 5px;
 }
 
 /* Option button = transparent container, pill inside */
 .status-dropdown-option {
   background: transparent;
-  padding: 6px 0;
+  padding: 6px 10px;
+  border-bottom: 1px solid #00000020;
 }
 
 /* Pill base (like screenshot) */

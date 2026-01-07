@@ -265,7 +265,7 @@ export default function LoginPrompt() {
               </div>
               
               <p className="login-instruction">
-                *Please use the exact mail as the webflow native app/framer native app
+                *Please use the same email you used for your Stripe purchase to access the dashboard.
               </p>
               
               {error && <div className="login-error">{error}</div>}

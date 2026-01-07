@@ -7,7 +7,6 @@ import { useNotification } from './hooks/useNotification';
 import { queryClient } from './lib/queryClient';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
-import Subscriptions from './components/Subscriptions';
 import Sites from './components/Sites';
 import Licenses from './components/Licenses';
 import Profile from './components/Profile';
@@ -17,13 +16,15 @@ import LoginPrompt from './components/LoginPrompt';
 import Notification from './components/Notification';
 import consentLogo from './assets/consent-logo.svg';
 import exportIcon from './assets/export-icon.svg';
+import DashboardSkeleton from './components/DashboardSkeleton';
 import './App.css';
+import { useRef } from 'react';
 
 function DashboardContent() {
   const { member, userEmail, isAuthenticated, loading: authLoading, error: authError } = useMemberstack();
   const { notification, showSuccess, showError, clear: clearNotification } = useNotification();
   const queryClient = useQueryClient();
-
+const initialRender = useRef(true);
   const [maxTimeoutReached, setMaxTimeoutReached] = useState(false);
   const [activeSection, setActiveSection] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -178,6 +179,7 @@ function DashboardContent() {
     setTimeout(pollForDomains, 5000);
   };
 
+
   // Handle return from Stripe
   useEffect(() => {
     if (!userEmail || !isAuthenticated) return;
@@ -260,10 +262,20 @@ function DashboardContent() {
     if (!subs) return Array.isArray(subs) ? [] : {};
     return subs;
   }, [dashboardData?.subscriptions]);
-
+useEffect(() => {
+  if (
+    (dashboardData || dashboardError) &&
+    (licensesData || licensesError)
+  ) {
+    initialRender.current = false;
+  }
+}, [dashboardData, dashboardError, licensesData, licensesError]);
   const hasCachedData = dashboardData || licensesData;
   const isFirstLoad = loadingDashboard || loadingLicenses;
-  const shouldShowLoading = isFirstLoad && !hasCachedData;
+  const shouldShowLoading =
+  initialRender.current &&
+  (loadingDashboard || loadingLicenses || authLoading);
+
 
   const error = dashboardError || licensesError || authError;
   if (error) {
@@ -295,7 +307,7 @@ function DashboardContent() {
               <img src={exportIcon} alt="Export" className="header-icon-image" />
             </button>
 
-            <button
+           {activeSection === 'licenses' && <button
               className="header-btn header-btn-text"
               onClick={() => setPurchaseModalOpen(true)}
             >
@@ -314,7 +326,7 @@ function DashboardContent() {
                 />
               </svg>
               <span>Purchase License Key</span>
-            </button>
+            </button>}
 
             <button
               className="header-btn header-btn-primary"
@@ -374,19 +386,7 @@ function DashboardContent() {
         <div className="dashboard-main">
           <div className="dashboard-content">
             {shouldShowLoading ? (
-              <div className="card">
-                <div className="loading">Loading dashboard data...</div>
-                <p
-                  style={{
-                    marginTop: '10px',
-                    color: '#666',
-                    fontSize: '14px',
-                  }}
-                >
-                  {loadingDashboard && 'Fetching dashboard data...'}
-                  {loadingLicenses && ' Fetching licenses...'}
-                </p>
-              </div>
+              <DashboardSkeleton />
             ) : dashboardError || licensesError ? (
               <div className="card">
                 <div
@@ -435,10 +435,11 @@ function DashboardContent() {
                   <Licenses licenses={licenses} isPolling={isPollingLicenses} />
                 )}
 
-                {activeSection === 'profile' && <Profile />}
+                {activeSection === 'profile' && <Profile userEmail={userEmail}  />}
               </>
             )}
           </div>
+         
         </div>
       </div>
 
@@ -452,6 +453,9 @@ function DashboardContent() {
         onClose={() => setAddDomainModalOpen(false)}
         userEmail={userEmail || ''}
       />
+        <footer className="app-footer">
+      © {new Date().getFullYear()} All rights reserved ConsentBit
+    </footer>
     </div>
   );
 }
