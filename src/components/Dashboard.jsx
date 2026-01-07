@@ -847,7 +847,7 @@ export default function Dashboard({
       <div className="recent-domains-section">
         <div className="recent-domains-header">
           <h3 className="recent-domains-title">Recent domains</h3>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div className="filter-wraper" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <select
               className="domains-filter-select"
               value={billingPeriodFilter}
