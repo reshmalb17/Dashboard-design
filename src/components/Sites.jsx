@@ -647,7 +647,7 @@ const handleContextMenu = (e, domainId) => {
     }
 
     const confirmed = window.confirm(
-      `Are you sure you want to cancel the subscription for "${domainName}"? This will cancel the entire subscription and all sites in it. The subscription will remain active until the end of the current billing period.`
+      `Are you sure you want to cancel the subscription for "${domainName}"? The subscription will remain active until the end of the current billing period.`
     );
 
     if (!confirmed) {

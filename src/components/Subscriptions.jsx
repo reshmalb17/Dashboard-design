@@ -41,6 +41,41 @@ export default function Subscriptions({ dashboardData, userEmail }) {
   // Use ref to track previous backendPendingSites to prevent infinite loops
   const prevBackendPendingSitesRef = useRef();
   
+  // Listen for payment completion messages from popup
+  useEffect(() => {
+    const handleMessage = (event) => {
+      // Verify origin for security
+      if (event.origin !== window.location.origin) return;
+      
+      if (event.data && event.data.type === 'PAYMENT_SUCCESS') {
+        // Payment completed - refresh data and reset processing state
+        setIsProcessing(false);
+        sessionStorage.removeItem('pendingSitesPurchase');
+        
+        // Refresh dashboard data
+        queryClient.refetchQueries({
+          queryKey: queryKeys.dashboard(userEmail),
+          type: 'active',
+        });
+        queryClient.refetchQueries({
+          queryKey: queryKeys.licenses(userEmail),
+          type: 'active',
+        });
+        
+        showSuccess('Payment successful! Your sites are being processed...');
+      } else if (event.data && event.data.type === 'PAYMENT_CANCELLED') {
+        // Payment cancelled - reset processing state
+        setIsProcessing(false);
+      }
+    };
+    
+    window.addEventListener('message', handleMessage);
+    
+    return () => {
+      window.removeEventListener('message', handleMessage);
+    };
+  }, [userEmail, queryClient, showSuccess]);
+  
   // Sync local pending sites with backend data
   useEffect(() => {
     // Compare with previous value using JSON.stringify for deep comparison
@@ -199,8 +234,33 @@ export default function Subscriptions({ dashboardData, userEmail }) {
       const checkoutData = await createCheckoutFromPending(userEmail, selectedPaymentPlan);
       
       if (checkoutData.url) {
-        // Redirect to Stripe checkout
-        window.location.href = checkoutData.url;
+        // Store pending purchase info for polling when user returns
+        sessionStorage.setItem('pendingSitesPurchase', JSON.stringify({
+          sites: sitesToSend.map(s => s.site),
+          billingPeriod: selectedPaymentPlan.toLowerCase(),
+          timestamp: Date.now(),
+        }));
+
+        // Open checkout in new window/popup
+        const checkoutWindow = window.open(checkoutData.url, '_blank', 'width=600,height=700');
+        
+        if (!checkoutWindow || checkoutWindow.closed) {
+          // Fallback to redirect if popup blocked
+          setTimeout(() => {
+            window.location.href = checkoutData.url;
+          }, 500);
+        } else {
+          // Check if popup was closed manually (user cancelled)
+          const checkClosed = setInterval(() => {
+            if (checkoutWindow.closed) {
+              clearInterval(checkClosed);
+              setIsProcessing(false);
+            }
+          }, 1000);
+          
+          // Cleanup interval when component unmounts or payment completes
+          // The global message listener in useEffect will handle payment success
+        }
       } else {
         throw new Error('No checkout URL received');
       }

@@ -46,12 +46,15 @@ export default function Licenses({ licenses }) {
         setIsQueuePolling(true);
         setQueueProgress(progress);
         
-        // Refresh license data periodically to show new licenses as they're created
-        await queryClient.invalidateQueries({
+        // Force refetch license data periodically to show new licenses as they're created
+        // Use refetchQueries to bypass staleTime: Infinity
+        await queryClient.refetchQueries({
           queryKey: queryKeys.dashboard(userEmail),
+          type: 'active',
         });
-        await queryClient.invalidateQueries({
+        await queryClient.refetchQueries({
           queryKey: queryKeys.licenses(userEmail),
+          type: 'active',
         });
       } else if (status === 'completed') {
         setIsQueuePolling(false);
@@ -65,12 +68,14 @@ export default function Licenses({ licenses }) {
         
         sessionStorage.removeItem('pendingLicensePurchase');
         
-        // Final refresh to get all licenses
-        await queryClient.invalidateQueries({
+        // Final refresh to get all licenses - force refetch
+        await queryClient.refetchQueries({
           queryKey: queryKeys.dashboard(userEmail),
+          type: 'active',
         });
-        await queryClient.invalidateQueries({
+        await queryClient.refetchQueries({
           queryKey: queryKeys.licenses(userEmail),
+          type: 'active',
         });
         
         // Show success message - use completed count from queue, not total licenses
@@ -98,8 +103,7 @@ export default function Licenses({ licenses }) {
         );
       }
     } catch (err) {
-      console.error('[Licenses] Status check failed', err);
-      // Don't stop polling on error, just log it
+      // Don't stop polling on error, continue polling
     }
   }, [userEmail, queryClient, showSuccess, showError]);
 
@@ -237,6 +241,12 @@ export default function Licenses({ licenses }) {
             }
           }
 
+          // Get platform from license data (if available) or set to N/A
+          const platform = lic.platform || lic.source || 'N/A';
+          const platformDisplay = platform !== 'N/A' 
+            ? platform.charAt(0).toUpperCase() + platform.slice(1).toLowerCase()
+            : 'N/A';
+
           return {
             id: lic.id || lic.license_key,
             licenseKey: lic.license_key || lic.licenseKey || 'N/A',
@@ -247,6 +257,7 @@ export default function Licenses({ licenses }) {
             expiryDate,
             subscriptionId: lic.subscription_id || lic.subscriptionId || null,
             siteDomain: lic.used_site_domain || lic.site_domain || null,
+            platform: platformDisplay,
           };
         })
       : [];
@@ -862,8 +873,8 @@ export default function Licenses({ licenses }) {
         </div>
       </div>
 
-      {/* Progress Banner - Show in Not Assigned tab when polling */}
-      {isQueuePolling && activeTab === 'Not Assigned' && queueProgress && (
+      {/* Progress Banner - Show when polling (all tabs) */}
+      {isQueuePolling && queueProgress && (
         <div className="licenses-progress-banner">
           <div className="licenses-progress-banner-content">
             <div className="licenses-progress-banner-icon">
@@ -899,20 +910,21 @@ export default function Licenses({ licenses }) {
       {/* Table */}
       <div className="licenses-table-wrapper">
         <table className="licenses-table">
-          <thead>
-            <tr>
-              <th>License Key</th>
-              <th>Billing Period</th>
-              <th>Activated for site</th>
-              <th>Created date</th>
-              <th>Expiry date</th>
-              <th></th>
-            </tr>
-          </thead>
+            <thead>
+              <tr>
+                <th>License Key</th>
+                <th>Billing Period</th>
+                <th>Platform</th>
+                <th>Activated for site</th>
+                <th>Created date</th>
+                <th>Expiry date</th>
+                <th></th>
+              </tr>
+            </thead>
           <tbody>
             {filteredLicenses.length === 0 ? (
               <tr>
-                <td colSpan="6" className="licenses-empty-cell">
+                <td colSpan="7" className="licenses-empty-cell">
                   No license keys found
                 </td>
               </tr>
@@ -1014,6 +1026,11 @@ export default function Licenses({ licenses }) {
                       }`}
                     >
                       {license.billingPeriod}
+                    </div>
+                  </td>
+                  <td>
+                    <div className="license-cell-content">
+                      {license.platform || 'N/A'}
                     </div>
                   </td>
                   <td>

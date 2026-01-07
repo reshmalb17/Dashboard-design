@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import "./Dashboard.css";
 import total from "../assets/wff.png";
 import webflow from "../assets/webflow.png";
 import Framer from "../assets/Framer.png";
 import www from "../assets/WWW.png";
 import { useNotification } from "../hooks/useNotification";
-import { cancelSubscription } from "../services/api";
+import { cancelSubscription, getLicensesStatus } from "../services/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../hooks/useDashboardQueries";
 import { useMemberstack } from "../hooks/useMemberstack";
@@ -38,9 +38,134 @@ export default function Dashboard({
   const [contextMenu, setContextMenu] = useState(null);
   const contextMenuRef = useRef(null);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelModal, setCancelModal] = useState(null);
+  
+  // Queue polling state for license generation progress
+  const [isQueuePolling, setIsQueuePolling] = useState(false);
+  const [queueProgress, setQueueProgress] = useState(null);
+  const queueIntervalIdRef = useRef(null);
+  const queueStoppedRef = useRef(false);
+  
   const { showSuccess, showError } = useNotification();
   const queryClient = useQueryClient();
   const { userEmail } = useMemberstack();
+
+  // Check queue status and update progress (for license generation)
+  const checkQueueStatus = useCallback(async () => {
+    if (queueStoppedRef.current || !userEmail) return;
+
+    try {
+      const data = await getLicensesStatus(userEmail);
+
+      const status = (data.status || '').toLowerCase().trim();
+      const progress = data.progress || {};
+
+      if (status === 'pending' || status === 'processing') {
+        setIsQueuePolling(true);
+        setQueueProgress(progress);
+        
+        // Force refetch license data periodically to show new licenses as they're created
+        // Use refetchQueries to bypass staleTime: Infinity
+        await queryClient.refetchQueries({
+          queryKey: queryKeys.dashboard(userEmail),
+          type: 'active',
+        });
+        await queryClient.refetchQueries({
+          queryKey: queryKeys.licenses(userEmail),
+          type: 'active',
+        });
+      } else if (status === 'completed') {
+        setIsQueuePolling(false);
+        setQueueProgress(null);
+        queueStoppedRef.current = true;
+        
+        if (queueIntervalIdRef.current) {
+          clearInterval(queueIntervalIdRef.current);
+          queueIntervalIdRef.current = null;
+        }
+        
+        sessionStorage.removeItem('pendingLicensePurchase');
+        
+        // Final refresh to get all licenses - force refetch
+        await queryClient.refetchQueries({
+          queryKey: queryKeys.dashboard(userEmail),
+          type: 'active',
+        });
+        await queryClient.refetchQueries({
+          queryKey: queryKeys.licenses(userEmail),
+          type: 'active',
+        });
+        
+        // Show success message
+        const completedCount = progress.completed || 0;
+        if (completedCount > 0) {
+          showSuccess(`Successfully created ${completedCount} license${completedCount > 1 ? 's' : ''}!`);
+        } else {
+          showSuccess('License creation completed!');
+        }
+      } else if (status === 'failed') {
+        setIsQueuePolling(false);
+        setQueueProgress(null);
+        queueStoppedRef.current = true;
+        
+        if (queueIntervalIdRef.current) {
+          clearInterval(queueIntervalIdRef.current);
+          queueIntervalIdRef.current = null;
+        }
+        
+        sessionStorage.removeItem('pendingLicensePurchase');
+        
+        showError(
+          data.message ||
+            'License creation failed. Please contact support or try again.'
+        );
+      }
+    } catch (err) {
+      // Don't stop polling on error, just log it
+    }
+  }, [userEmail, queryClient, showSuccess, showError]);
+
+  // Start polling when component mounts if there's a pending purchase
+  useEffect(() => {
+    if (!userEmail) return;
+
+    // Check if there's a pending purchase in sessionStorage
+    const pendingPurchase = sessionStorage.getItem('pendingLicensePurchase');
+    if (pendingPurchase) {
+      try {
+        const purchaseData = JSON.parse(pendingPurchase);
+        const purchaseTime = purchaseData.timestamp || 0;
+        const timeSincePurchase = Date.now() - purchaseTime;
+        
+        // Only start polling if purchase was recent (within last 30 minutes)
+        if (timeSincePurchase < 30 * 60 * 1000) {
+          queueStoppedRef.current = false;
+          setIsQueuePolling(true);
+          
+          // Check immediately
+          checkQueueStatus();
+          
+          // Then poll every 3 seconds
+          queueIntervalIdRef.current = setInterval(() => {
+            checkQueueStatus();
+          }, 3000);
+        } else {
+          // Purchase is too old, remove from sessionStorage
+          sessionStorage.removeItem('pendingLicensePurchase');
+        }
+      } catch (err) {
+        sessionStorage.removeItem('pendingLicensePurchase');
+      }
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (queueIntervalIdRef.current) {
+        clearInterval(queueIntervalIdRef.current);
+        queueIntervalIdRef.current = null;
+      }
+    };
+  }, [userEmail, checkQueueStatus]);
 
   // Calculate stats from real data
   const dashboardStats = useMemo(() => {
@@ -219,6 +344,12 @@ export default function Dashboard({
           }
         }
 
+        // Get platform from site data
+        const platform = siteData?.platform || siteData?.source || "N/A";
+        const platformDisplay = platform !== "N/A" 
+          ? platform.charAt(0).toUpperCase() + platform.slice(1).toLowerCase()
+          : "N/A";
+
         allItems.push({
           id: subscriptionId
             ? `${subscriptionId}_${itemIndex}`
@@ -234,6 +365,7 @@ export default function Dashboard({
           created,
           createdTimestamp: createdAt || 0,
           subscriptionId,
+          platform: platformDisplay,
         });
       });
     });
@@ -341,6 +473,12 @@ export default function Dashboard({
         siteData?.subscriptionId || 
         null;
 
+      // Get platform from site data
+      const platform = siteData?.platform || siteData?.source || "N/A";
+      const platformDisplay = platform !== "N/A" 
+        ? platform.charAt(0).toUpperCase() + platform.slice(1).toLowerCase()
+        : "N/A";
+
       allItems.push({
         id: `license_${license.license_key || activatedSite}`,
         domain: activatedSite,
@@ -354,6 +492,7 @@ export default function Dashboard({
         created,
         createdTimestamp: license.created_at || 0,
         subscriptionId,
+        platform: platformDisplay,
       });
     });
 
@@ -496,12 +635,21 @@ export default function Dashboard({
     }
   }, [contextMenu]);
 
-  const handleCancelSubscription = async (
-    subscriptionId,
-    domainName,
-    siteDomain,
-  ) => {
+  const handleOpenCancelModal = (subscriptionId, domainName, siteDomain) => {
+    setCancelModal({ subscriptionId, domainName, siteDomain });
+    setContextMenu(null);
+  };
+
+  const handleCloseCancelModal = () => {
+    if (isCancelling) return; // Prevent closing during cancellation
+    setCancelModal(null);
+  };
+
+  const handleCancelSubscription = async () => {
     if (isCancelling) return;
+    if (!cancelModal) return;
+
+    const { subscriptionId, siteDomain, domainName } = cancelModal;
 
     if (!userEmail) {
       showError("User email not found. Please refresh the page.");
@@ -518,17 +666,7 @@ export default function Dashboard({
       return;
     }
 
-    const confirmed = window.confirm(
-      `Are you sure you want to cancel the subscription for "${domainName}"? This will cancel the entire subscription and all sites in it. The subscription will remain active until the end of the current billing period.`,
-    );
-
-    if (!confirmed) {
-      setContextMenu(null);
-      return;
-    }
-
     setIsCancelling(true);
-    setContextMenu(null);
 
     try {
       const response = await cancelSubscription(
@@ -541,9 +679,62 @@ export default function Dashboard({
         "Subscription cancelled successfully. The subscription will remain active until the end of the current billing period.";
       showSuccess(message);
 
+      // Update dashboard cache
+      queryClient.setQueryData(
+        queryKeys.dashboard(userEmail),
+        (oldData) => {
+          if (!oldData) return oldData;
+
+          // Update sites
+          const updatedSites = { ...oldData.sites };
+          if (updatedSites[siteDomain]) {
+            updatedSites[siteDomain] = {
+              ...updatedSites[siteDomain],
+              status: 'cancelled',
+            };
+          }
+
+          // Update subscriptions
+          const subscriptionsArray = Array.isArray(oldData.subscriptions)
+            ? oldData.subscriptions
+            : Object.values(oldData.subscriptions || {});
+          
+          const updatedSubscriptions = subscriptionsArray.map((sub) => {
+            const subId = sub.subscription_id || sub.subscriptionId || sub.id;
+            if (subId === subscriptionId) {
+              return {
+                ...sub,
+                status: 'cancelled',
+              };
+            }
+            return sub;
+          });
+
+          // Convert back to original format if it was an object
+          const subscriptionsFormatted = Array.isArray(oldData.subscriptions)
+            ? updatedSubscriptions
+            : updatedSubscriptions.reduce((acc, sub) => {
+                const subId = sub.subscription_id || sub.subscriptionId || sub.id;
+                if (subId) {
+                  acc[subId] = sub;
+                }
+                return acc;
+              }, {});
+
+          return {
+            ...oldData,
+            sites: updatedSites,
+            subscriptions: subscriptionsFormatted,
+          };
+        }
+      );
+
+      // Invalidate queries to trigger UI updates
       await queryClient.invalidateQueries({
         queryKey: queryKeys.dashboard(userEmail),
       });
+
+      handleCloseCancelModal();
     } catch (error) {
       const errorMessage = error.message || error.error || "Unknown error";
       showError("Failed to cancel subscription: " + errorMessage);
@@ -617,6 +808,40 @@ export default function Dashboard({
           </div>
         </div>
       </div>
+
+      {/* Progress Banner - Show when license generation is in progress */}
+      {isQueuePolling && queueProgress && (
+        <div className="licenses-progress-banner" style={{ marginBottom: '24px' }}>
+          <div className="licenses-progress-banner-content">
+            <div className="licenses-progress-banner-icon">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="2" strokeDasharray="12.566" strokeDashoffset="6.283">
+                  <animate attributeName="stroke-dashoffset" values="12.566;0;12.566" dur="1.5s" repeatCount="indefinite" />
+                </circle>
+              </svg>
+            </div>
+            <div className="licenses-progress-banner-text">
+              <strong>Creating your licenses...</strong>
+              <span>
+                {queueProgress.completed || 0} of {queueProgress.total || '?'}
+                {queueProgress.processing > 0 && ` (${queueProgress.processing} processing)`}
+              </span>
+            </div>
+            <div className="licenses-progress-banner-bar-wrapper">
+              <div className="licenses-progress-banner-bar">
+                <div 
+                  className="licenses-progress-banner-bar-fill" 
+                  style={{ 
+                    width: queueProgress.total > 0 
+                      ? `${((queueProgress.completed || 0) / queueProgress.total) * 100}%` 
+                      : '0%' 
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Recent Domains Table */}
       <div className="recent-domains-section">
@@ -819,7 +1044,7 @@ export default function Dashboard({
                               <button
                                 className="context-menu-item context-menu-item-danger"
                                 onClick={() =>
-                                  handleCancelSubscription(
+                                  handleOpenCancelModal(
                                     contextMenu.subscriptionId,
                                     contextMenu.domainName,
                                     contextMenu.siteDomain,
@@ -827,11 +1052,7 @@ export default function Dashboard({
                                 }
                                 disabled={isCancelling || domain.status === "Cancelled" || domain.status === "Expired"}
                               >
-                                <span>
-                                  {isCancelling
-                                    ? "Cancelling..."
-                                    : "Cancel Subscription"}
-                                </span>
+                                <span>Cancel Subscription</span>
                               </button>
                             </div>
                           )}
@@ -845,6 +1066,95 @@ export default function Dashboard({
           </table>
         </div>
       </div>
+
+      {/* Cancel Subscription Modal */}
+      {cancelModal !== null && (
+        <>
+          <div
+            className="modal-overlay"
+            onClick={isCancelling ? undefined : handleCloseCancelModal}
+            style={{ cursor: isCancelling ? 'not-allowed' : 'pointer' }}
+          />
+          <div className="cancel-modal">
+            <div className="cancel-modal-header">
+              <h2 className="cancel-modal-title">Cancel Subscription</h2>
+              <button
+                className="cancel-modal-close"
+                onClick={isCancelling ? undefined : handleCloseCancelModal}
+                title="Close"
+                disabled={isCancelling}
+                style={{ opacity: isCancelling ? 0.5 : 1, cursor: isCancelling ? 'not-allowed' : 'pointer' }}
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M15 5L5 15M5 5L15 15"
+                    stroke="#666"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div className="cancel-modal-body">
+              <p className="cancel-modal-message">
+                Are you sure you want to cancel the subscription for{' '}
+                <strong>"{cancelModal.domainName || cancelModal.siteDomain}"</strong>? The subscription will remain active until the end of the current billing period.
+              </p>
+              <div className="cancel-modal-actions">
+                <button
+                  className="cancel-modal-cancel-btn"
+                  onClick={handleCloseCancelModal}
+                  disabled={isCancelling}
+                  style={{
+                    opacity: isCancelling ? 0.6 : 1,
+                    pointerEvents: isCancelling ? 'none' : 'auto',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className={`cancel-modal-confirm-btn ${isCancelling ? 'cancelling' : ''}`}
+                  onClick={handleCancelSubscription}
+                  disabled={isCancelling}
+                >
+                  {isCancelling ? (
+                    <>
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="cancel-spinner"
+                      >
+                        <circle
+                          cx="8"
+                          cy="8"
+                          r="7"
+                          stroke="#fff"
+                          strokeWidth="2"
+                          strokeDasharray="43.98"
+                          strokeDashoffset="10"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      Cancelling...
+                    </>
+                  ) : (
+                    'Confirm Cancellation'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
