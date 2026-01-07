@@ -13,11 +13,15 @@
 
 .profile-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   margin-bottom: 24px;
   padding-bottom: 16px;
   border-bottom: 1px solid #e5e7eb;
+}
+
+.profile-header-spacer {
+  flex: 1;
 }
 
 .profile-title {
@@ -86,15 +90,6 @@
   font-weight: 600;
 
 }
-button.profile-logout-btn {
-    margin-left: 91px;
-}
-.profile-actions {
-  display: flex;
-  gap: 12px;
-  padding-top: 7px;
-  
-}
 button{
   font-family: 'DM Sans', sans-serif;
 }
@@ -122,8 +117,221 @@ button{
   transform: translateY(1px);
 }
 
+/* Invoices Section */
+.profile-invoices-section {
+  margin-top: 32px;
+  padding-top: 32px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.profile-invoices-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #262E84;
+  margin: 0 0 20px 0;
+}
+
+.profile-invoices-count {
+  font-size: 16px;
+  font-weight: 400;
+  color: #6b7280;
+  margin-left: 8px;
+}
+
+.profile-invoices-loading,
+.profile-invoices-error,
+.profile-invoices-empty {
+  padding: 20px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.profile-invoices-error {
+  color: #ef4444;
+}
+
+.profile-invoices-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.profile-invoice-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.profile-invoice-item:hover {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.profile-invoice-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.profile-invoice-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.profile-invoice-number {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.profile-invoice-amount {
+  font-size: 16px;
+  font-weight: 700;
+  color: #262E84;
+}
+
+.profile-invoice-meta {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.profile-invoice-date {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.profile-invoice-description {
+  font-size: 13px;
+  color: #6b7280;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-invoice-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: 16px;
+}
+
+.profile-invoice-download-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 6px;
+  border: 1px solid #262E84;
+  background: white;
+  color: #262E84;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+  font-family: 'DM Sans', sans-serif;
+  margin-left: 0;
+  min-width: 28px;
+  height: 28px;
+}
+
+.profile-invoice-download-btn:hover {
+  background: #EFF6FF;
+  border-color: #2563EB;
+  transform: translateY(-1px);
+}
+
+.profile-invoice-download-btn:active {
+  transform: translateY(0);
+}
+
+.profile-invoice-download-btn svg {
+  flex-shrink: 0;
+}
+
+/* Load More Button */
+.profile-invoices-load-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.profile-load-more-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border: 1px solid #262E84;
+  background: white;
+  color: #262E84;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.2s;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.profile-load-more-btn:hover:not(:disabled) {
+  background: #EFF6FF;
+  border-color: #2563EB;
+  transform: translateY(-1px);
+}
+
+.profile-load-more-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.profile-load-more-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.profile-load-more-btn svg {
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+
+.profile-load-more-btn:hover:not(:disabled) svg {
+  transform: translateY(2px);
+}
+
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e5e7eb;
+  border-top-color: #262E84;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Responsive */
 @media (max-width: 768px) {
+  .profile-header {
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+  }
+
   .profile-content {
     flex-direction: column;
     align-items: center;
@@ -138,6 +346,33 @@ button{
 
   .profile-detail-label {
     min-width: unset;
+  }
+
+  .profile-invoice-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .profile-invoice-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .profile-invoice-actions {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .profile-invoice-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .profile-invoice-description {
+    max-width: 100%;
   }
 }
 

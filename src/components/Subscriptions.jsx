@@ -6,23 +6,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys, useLicenses } from '../hooks/useDashboardQueries';
 
 export default function Subscriptions({ dashboardData, userEmail }) {
-  // Debug: Log received data
-  useEffect(() => {
-    console.log('[Subscriptions] dashboardData received:', dashboardData);
-    console.log('[Subscriptions] userEmail:', userEmail);
-  }, [dashboardData, userEmail]);
-  
   // Handle both array and object formats for subscriptions
   const subscriptionsRaw = dashboardData?.subscriptions || {};
   const subscriptions = Array.isArray(subscriptionsRaw) 
     ? subscriptionsRaw 
     : Object.values(subscriptionsRaw);
-  
-  // Debug: Log processed subscriptions
-  useEffect(() => {
-    console.log('[Subscriptions] Processed subscriptions:', subscriptions);
-    console.log('[Subscriptions] Subscriptions count:', subscriptions.length);
-  }, [subscriptions]);
   
   // Also get subscriptions as object for detailed access
   const subscriptionsObj = Array.isArray(subscriptionsRaw)
@@ -30,12 +18,6 @@ export default function Subscriptions({ dashboardData, userEmail }) {
     : subscriptionsRaw;
   
   const sites = dashboardData?.sites || {};
-  
-  // Debug: Log sites
-  useEffect(() => {
-    console.log('[Subscriptions] Sites:', sites);
-    console.log('[Subscriptions] Sites count:', Object.keys(sites).length);
-  }, [sites]);
   
   // Memoize backendPendingSites to prevent unnecessary re-renders
   const backendPendingSites = useMemo(() => {
@@ -46,13 +28,6 @@ export default function Subscriptions({ dashboardData, userEmail }) {
   const { data: licensesData, isLoading: loadingLicenses, error: licensesError } = useLicenses(userEmail, { enabled: !!userEmail });
   const licenses = licensesData?.licenses || [];
   
-  // Debug: Log licenses
-  useEffect(() => {
-    console.log('[Subscriptions] Licenses:', licenses);
-    console.log('[Subscriptions] Licenses count:', licenses.length);
-    console.log('[Subscriptions] Loading licenses:', loadingLicenses);
-    console.log('[Subscriptions] Licenses error:', licensesError);
-  }, [licenses, loadingLicenses, licensesError]);
   const { showSuccess, showError } = useNotification();
   const queryClient = useQueryClient();
 
@@ -65,6 +40,41 @@ export default function Subscriptions({ dashboardData, userEmail }) {
 
   // Use ref to track previous backendPendingSites to prevent infinite loops
   const prevBackendPendingSitesRef = useRef();
+  
+  // Listen for payment completion messages from popup
+  useEffect(() => {
+    const handleMessage = (event) => {
+      // Verify origin for security
+      if (event.origin !== window.location.origin) return;
+      
+      if (event.data && event.data.type === 'PAYMENT_SUCCESS') {
+        // Payment completed - refresh data and reset processing state
+        setIsProcessing(false);
+        sessionStorage.removeItem('pendingSitesPurchase');
+        
+        // Refresh dashboard data
+        queryClient.refetchQueries({
+          queryKey: queryKeys.dashboard(userEmail),
+          type: 'active',
+        });
+        queryClient.refetchQueries({
+          queryKey: queryKeys.licenses(userEmail),
+          type: 'active',
+        });
+        
+        showSuccess('Payment successful! Your sites are being processed...');
+      } else if (event.data && event.data.type === 'PAYMENT_CANCELLED') {
+        // Payment cancelled - reset processing state
+        setIsProcessing(false);
+      }
+    };
+    
+    window.addEventListener('message', handleMessage);
+    
+    return () => {
+      window.removeEventListener('message', handleMessage);
+    };
+  }, [userEmail, queryClient, showSuccess]);
   
   // Sync local pending sites with backend data
   useEffect(() => {
@@ -224,8 +234,33 @@ export default function Subscriptions({ dashboardData, userEmail }) {
       const checkoutData = await createCheckoutFromPending(userEmail, selectedPaymentPlan);
       
       if (checkoutData.url) {
-        // Redirect to Stripe checkout
-        window.location.href = checkoutData.url;
+        // Store pending purchase info for polling when user returns
+        sessionStorage.setItem('pendingSitesPurchase', JSON.stringify({
+          sites: sitesToSend.map(s => s.site),
+          billingPeriod: selectedPaymentPlan.toLowerCase(),
+          timestamp: Date.now(),
+        }));
+
+        // Open checkout in new window/popup
+        const checkoutWindow = window.open(checkoutData.url, '_blank', 'width=600,height=700');
+        
+        if (!checkoutWindow || checkoutWindow.closed) {
+          // Fallback to redirect if popup blocked
+          setTimeout(() => {
+            window.location.href = checkoutData.url;
+          }, 500);
+        } else {
+          // Check if popup was closed manually (user cancelled)
+          const checkClosed = setInterval(() => {
+            if (checkoutWindow.closed) {
+              clearInterval(checkClosed);
+              setIsProcessing(false);
+            }
+          }, 1000);
+          
+          // Cleanup interval when component unmounts or payment completes
+          // The global message listener in useEffect will handle payment success
+        }
       } else {
         throw new Error('No checkout URL received');
       }

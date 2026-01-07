@@ -134,9 +134,14 @@ button.header-btn.header-btn-primary {
   border-color: #262E84;
 }
 
-.header-btn-primary:hover {
+.header-btn-primary:hover:not(:disabled) {
   background: #1e2470;
   border-color: #1e2470;
+}
+
+.header-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .header-btn-primary svg path {

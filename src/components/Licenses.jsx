@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNotification } from '../hooks/useNotification';
 import { cancelSubscription, activateLicense,getLicensesStatus } from '../services/api';
 import { useQueryClient } from '@tanstack/react-query';
@@ -13,13 +13,18 @@ export default function Licenses({ licenses }) {
   const [billingPeriodFilter, setBillingPeriodFilter] = useState('');
   const [contextMenu, setContextMenu] = useState(null);
   const [activateModal, setActivateModal] = useState(null);
+  const [cancelModal, setCancelModal] = useState(null);
   const [domainInput, setDomainInput] = useState('');
+  const [domainError, setDomainError] = useState('');
   const [copiedKey, setCopiedKey] = useState(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isActivatingLicense, setActivatingLicense] = useState(false);
 
-  // NEW: internal polling flag for queue
+  // Queue polling state
   const [isQueuePolling, setIsQueuePolling] = useState(false);
+  const [queueProgress, setQueueProgress] = useState(null);
+  const intervalIdRef = useRef(null);
+  const stoppedRef = useRef(false);
 
   const contextMenuRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -27,50 +32,124 @@ export default function Licenses({ licenses }) {
   const queryClient = useQueryClient();
   const { userEmail } = useMemberstack();
 
+  // Check queue status and update progress
+  const checkStatus = useCallback(async () => {
+    if (stoppedRef.current || !userEmail) return;
 
-const checkStatus = async () => {
-  if (stopped) return;
+    try {
+      const data = await getLicensesStatus(userEmail);
 
-  try {
-    // This is JSON already (e.g. { status: 'pending' })
-    const data = await getLicensesStatus(userEmail);
+      const status = (data.status || '').toLowerCase().trim();
+      const progress = data.progress || {};
 
-    console.log('[Licenses] /api/licenses/status =>', data);
-
-    // no .ok here; just read data.status
-    const status = (data.status || '').toLowerCase().trim();
-
-    if (status === 'pending') {
-      setIsQueuePolling(true);
-    } else if (status === 'completed') {
-      setIsQueuePolling(false);
-      sessionStorage.removeItem('pendingLicensePurchase');
-      stopped = true;
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
+      if (status === 'pending' || status === 'processing') {
+        setIsQueuePolling(true);
+        setQueueProgress(progress);
+        
+        // Force refetch license data periodically to show new licenses as they're created
+        // Use refetchQueries to bypass staleTime: Infinity
+        await queryClient.refetchQueries({
+          queryKey: queryKeys.dashboard(userEmail),
+          type: 'active',
+        });
+        await queryClient.refetchQueries({
+          queryKey: queryKeys.licenses(userEmail),
+          type: 'active',
+        });
+      } else if (status === 'completed') {
+        setIsQueuePolling(false);
+        setQueueProgress(null);
+        stoppedRef.current = true;
+        
+        if (intervalIdRef.current) {
+          clearInterval(intervalIdRef.current);
+          intervalIdRef.current = null;
+        }
+        
+        sessionStorage.removeItem('pendingLicensePurchase');
+        
+        // Final refresh to get all licenses - force refetch
+        await queryClient.refetchQueries({
+          queryKey: queryKeys.dashboard(userEmail),
+          type: 'active',
+        });
+        await queryClient.refetchQueries({
+          queryKey: queryKeys.licenses(userEmail),
+          type: 'active',
+        });
+        
+        // Show success message - use completed count from queue, not total licenses
+        const completedCount = progress.completed || 0;
+        if (completedCount > 0) {
+          showSuccess(`Successfully created ${completedCount} license${completedCount > 1 ? 's' : ''}!`);
+        } else {
+          showSuccess('License creation completed!');
+        }
+      } else if (status === 'failed') {
+        setIsQueuePolling(false);
+        setQueueProgress(null);
+        stoppedRef.current = true;
+        
+        if (intervalIdRef.current) {
+          clearInterval(intervalIdRef.current);
+          intervalIdRef.current = null;
+        }
+        
+        sessionStorage.removeItem('pendingLicensePurchase');
+        
+        showError(
+          data.message ||
+            'License creation failed. Please contact support or try again.'
+        );
       }
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.dashboard(userEmail),
-      });
-    } else if (status === 'failed') {
-      setIsQueuePolling(false);
-      sessionStorage.removeItem('pendingLicensePurchase');
-      stopped = true;
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-
-      showError(
-        data.message ||
-          'License creation failed. Please contact support or try again.'
-      );
+    } catch (err) {
+      // Don't stop polling on error, continue polling
     }
-  } catch (err) {
-    console.error('Status check failed', err);
-  }
-};
+  }, [userEmail, queryClient, showSuccess, showError]);
+
+  // Start polling when component mounts if there's a pending purchase
+  useEffect(() => {
+    if (!userEmail) return;
+
+    // Check if there's a pending purchase in sessionStorage
+    const pendingPurchase = sessionStorage.getItem('pendingLicensePurchase');
+    if (pendingPurchase) {
+      try {
+        const purchaseData = JSON.parse(pendingPurchase);
+        const purchaseTime = purchaseData.timestamp || 0;
+        const timeSincePurchase = Date.now() - purchaseTime;
+        
+        // Only start polling if purchase was recent (within last 30 minutes)
+        // Queue processing should complete within a few minutes
+        if (timeSincePurchase < 30 * 60 * 1000) {
+          stoppedRef.current = false;
+          setIsQueuePolling(true);
+          
+          // Check immediately
+          checkStatus();
+          
+          // Then poll every 3 seconds
+          intervalIdRef.current = setInterval(() => {
+            checkStatus();
+          }, 3000);
+        } else {
+          // Purchase is too old, remove from sessionStorage
+          sessionStorage.removeItem('pendingLicensePurchase');
+        }
+      } catch (err) {
+        console.error('[Licenses] Error parsing pending purchase:', err);
+        sessionStorage.removeItem('pendingLicensePurchase');
+      }
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (intervalIdRef.current) {
+        clearInterval(intervalIdRef.current);
+        intervalIdRef.current = null;
+      }
+    };
+  }, [userEmail, checkStatus]);
 
 
   // Prepare licenses
@@ -112,9 +191,13 @@ const checkStatus = async () => {
               const timestamp =
                 typeof createdAt === 'number' ? createdAt : parseInt(createdAt);
               const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
-              createdDate = !isNaN(dateInMs)
-                ? new Date(dateInMs).toLocaleDateString()
-                : 'N/A';
+              if (!isNaN(dateInMs)) {
+                const date = new Date(dateInMs);
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const year = date.getFullYear();
+                createdDate = `${month}/${day}/${year}`;
+              }
             } catch {
               createdDate = 'N/A';
             }
@@ -134,24 +217,47 @@ const checkStatus = async () => {
                   ? expiryTimestamp
                   : parseInt(expiryTimestamp);
               const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
-              expiryDate = !isNaN(dateInMs)
-                ? new Date(dateInMs).toLocaleDateString()
-                : 'N/A';
+              if (!isNaN(dateInMs)) {
+                const date = new Date(dateInMs);
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const year = date.getFullYear();
+                expiryDate = `${month}/${day}/${year}`;
+              }
             } catch {
               expiryDate = 'N/A';
             }
           }
 
+          // Normalize billing period to match filter options
+          let billingPeriod = 'N/A';
+          const rawBillingPeriod = lic.billing_period || lic.billingPeriod;
+          if (rawBillingPeriod) {
+            const period = rawBillingPeriod.toLowerCase().trim();
+            if (period.endsWith('ly')) {
+              billingPeriod = period.charAt(0).toUpperCase() + period.slice(1);
+            } else {
+              billingPeriod = period.charAt(0).toUpperCase() + period.slice(1) + 'ly';
+            }
+          }
+
+          // Get platform from license data (if available) or set to N/A
+          const platform = lic.platform || lic.source || 'N/A';
+          const platformDisplay = platform !== 'N/A' 
+            ? platform.charAt(0).toUpperCase() + platform.slice(1).toLowerCase()
+            : 'N/A';
+
           return {
             id: lic.id || lic.license_key,
             licenseKey: lic.license_key || lic.licenseKey || 'N/A',
             status,
-            billingPeriod: lic.billing_period || lic.billingPeriod || 'N/A',
+            billingPeriod,
             activatedForSite,
             createdDate,
             expiryDate,
             subscriptionId: lic.subscription_id || lic.subscriptionId || null,
             siteDomain: lic.used_site_domain || lic.site_domain || null,
+            platform: platformDisplay,
           };
         })
       : [];
@@ -200,52 +306,163 @@ const checkStatus = async () => {
     if (!searchQuery.trim()) setIsSearchExpanded(false);
   };
 
-  const handleCancelSubscription = async (subscriptionId, siteDomain) => {
-    if (isCancelling) return;
-    if (!userEmail) return showError('User email not found. Please refresh.');
-    if (!subscriptionId) return showError('Subscription ID not found.');
-    if (!siteDomain) return showError('Site domain not found.');
+  const handleOpenCancelModal = (subscriptionId, siteDomain) => {
+    setCancelModal({ subscriptionId, siteDomain });
+    setContextMenu(null);
+  };
 
-    const confirmed = window.confirm(
-      `Are you sure you want to cancel the subscription for "${siteDomain}"?`,
-    );
-    if (!confirmed) return setContextMenu(null);
+  const handleCloseCancelModal = () => {
+    if (isCancelling) return; // Prevent closing during cancellation
+    setCancelModal(null);
+  };
+
+  const handleCancelSubscription = async () => {
+    if (isCancelling) return;
+    if (!cancelModal) return;
+    
+    const { subscriptionId, siteDomain } = cancelModal;
+    
+    if (!userEmail) {
+      showError('User email not found. Please refresh.');
+      return;
+    }
+    if (!subscriptionId) {
+      showError('Subscription ID not found.');
+      return;
+    }
+    if (!siteDomain) {
+      showError('Site domain not found.');
+      return;
+    }
 
     setIsCancelling(true);
-    setContextMenu(null);
 
     try {
       const response = await cancelSubscription(userEmail, siteDomain, subscriptionId);
-      console.log('Cancel subscription response:', response);
-    if (response.success) {
-  showSuccess(response.message || 'Subscription cancelled successfully.');
+      if (response.success) {
+        const successMessage = response.message || `Subscription for "${siteDomain}" has been cancelled successfully.`;
+        showSuccess(successMessage);
 
-  queryClient.setQueryData(
-    queryKeys.dashboard(userEmail),
-    (oldData) => {
-      if (!oldData) return oldData;
+        // Update licenses cache
+        queryClient.setQueryData(
+          queryKeys.licenses(userEmail),
+          (oldData) => {
+            if (!oldData) return oldData;
 
-      const newLicenses = oldData.licenses?.map((lic) => {
-        if (
-          lic.subscription_id !== subscriptionId &&
-          lic.subscriptionId !== subscriptionId
-        ) {
-          return lic;
-        }
+            const updatedLicenses = oldData.licenses?.map((lic) => {
+              // Match by subscription ID or site domain
+              const matchesSubscription = 
+                lic.subscription_id === subscriptionId ||
+                lic.subscriptionId === subscriptionId;
+              
+              const matchesDomain = 
+                (lic.used_site_domain || lic.site_domain || '').toLowerCase().trim() ===
+                siteDomain.toLowerCase().trim();
 
-        return {
-          ...lic,
-          status: 'cancelled', // backend status
-        };
-      });
+              if (matchesSubscription || matchesDomain) {
+                return {
+                  ...lic,
+                  status: 'cancelled', // backend status
+                  subscription_id: lic.subscription_id || subscriptionId,
+                  subscriptionId: lic.subscriptionId || subscriptionId,
+                };
+              }
 
-      return {
-        ...oldData,
-        licenses: newLicenses,
-      };
-    }
-  );
-    }
+              return lic;
+            });
+
+            return {
+              ...oldData,
+              licenses: updatedLicenses,
+            };
+          }
+        );
+
+        // Update dashboard cache - licenses
+        queryClient.setQueryData(
+          queryKeys.dashboard(userEmail),
+          (oldData) => {
+            if (!oldData) return oldData;
+
+            // Update licenses in dashboard
+            const updatedLicenses = oldData.licenses?.map((lic) => {
+              const matchesSubscription = 
+                lic.subscription_id === subscriptionId ||
+                lic.subscriptionId === subscriptionId;
+              
+              const matchesDomain = 
+                (lic.used_site_domain || lic.site_domain || '').toLowerCase().trim() ===
+                siteDomain.toLowerCase().trim();
+
+              if (matchesSubscription || matchesDomain) {
+                return {
+                  ...lic,
+                  status: 'cancelled',
+                  subscription_id: lic.subscription_id || subscriptionId,
+                  subscriptionId: lic.subscriptionId || subscriptionId,
+                };
+              }
+
+              return lic;
+            });
+
+            // Update sites
+            const updatedSites = { ...oldData.sites };
+            if (updatedSites[siteDomain]) {
+              updatedSites[siteDomain] = {
+                ...updatedSites[siteDomain],
+                status: 'cancelled',
+              };
+            }
+
+            // Update subscriptions
+            const subscriptionsArray = Array.isArray(oldData.subscriptions)
+              ? oldData.subscriptions
+              : Object.values(oldData.subscriptions || {});
+            
+            const updatedSubscriptions = subscriptionsArray.map((sub) => {
+              const subId = sub.subscription_id || sub.subscriptionId || sub.id;
+              if (subId === subscriptionId) {
+                return {
+                  ...sub,
+                  status: 'cancelled',
+                };
+              }
+              return sub;
+            });
+
+            // Convert back to original format if it was an object
+            const subscriptionsFormatted = Array.isArray(oldData.subscriptions)
+              ? updatedSubscriptions
+              : updatedSubscriptions.reduce((acc, sub) => {
+                  const subId = sub.subscription_id || sub.subscriptionId || sub.id;
+                  if (subId) {
+                    acc[subId] = sub;
+                  }
+                  return acc;
+                }, {});
+
+            return {
+              ...oldData,
+              licenses: updatedLicenses,
+              sites: updatedSites,
+              subscriptions: subscriptionsFormatted,
+            };
+          }
+        );
+
+        // Invalidate queries to trigger UI updates
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.licenses(userEmail),
+          refetchType: 'none',
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.dashboard(userEmail),
+          refetchType: 'none',
+        });
+
+        handleCloseCancelModal();
+      }
     } catch (error) {
       showError(
         'Failed to cancel subscription: ' +
@@ -289,46 +506,236 @@ const checkStatus = async () => {
   const handleOpenActivateModal = (licenseId) => {
     setActivateModal({ id: licenseId });
     setDomainInput('');
+    setDomainError('');
   };
 
   const handleCloseActivateModal = () => {
     setActivateModal(null);
     setDomainInput('');
+    setDomainError('');
+  };
+
+  // Validate domain pattern: www.sitename.domain
+  const validateDomainPattern = (domain) => {
+    // Pattern: www.sitename.domain (e.g., www.example.com, www.test.co.in)
+    const domainPattern = /^www\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/;
+    return domainPattern.test(domain.trim());
+  };
+
+  // Check if domain is already activated (checks both props and query cache)
+  const checkDomainAlreadyActivated = (domain) => {
+    const normalizedDomain = domain.trim().toLowerCase();
+    
+    // Check licenses prop
+    if (licenses && Array.isArray(licenses)) {
+      const foundInProps = licenses.some((lic) => {
+        const activatedDomain = (
+          lic.activated_for_site ||
+          lic.activatedForSite ||
+          lic.used_site_domain ||
+          lic.site_domain ||
+          ''
+        ).toLowerCase().trim();
+        
+        return activatedDomain === normalizedDomain && activatedDomain !== '';
+      });
+      
+      if (foundInProps) return true;
+    }
+    
+    // Also check query cache for latest data
+    const cachedData = queryClient.getQueryData(queryKeys.licenses(userEmail));
+    if (cachedData && cachedData.licenses && Array.isArray(cachedData.licenses)) {
+      const foundInCache = cachedData.licenses.some((lic) => {
+        const activatedDomain = (
+          lic.activated_for_site ||
+          lic.activatedForSite ||
+          lic.used_site_domain ||
+          lic.site_domain ||
+          ''
+        ).toLowerCase().trim();
+        
+        return activatedDomain === normalizedDomain && activatedDomain !== '';
+      });
+      
+      if (foundInCache) return true;
+    }
+    
+    return false;
+  };
+
+  const handleDomainInputChange = (e) => {
+    const value = e.target.value;
+    setDomainInput(value);
+    
+    // Clear error when user starts typing
+    if (domainError) {
+      setDomainError('');
+    }
+  };
+
+  const validateDomain = async (domain) => {
+    const trimmedDomain = domain.trim();
+    
+    // Check if empty
+    if (!trimmedDomain) {
+      setDomainError('Please enter a domain');
+      return false;
+    }
+
+    // Check pattern
+    if (!validateDomainPattern(trimmedDomain)) {
+      setDomainError('Domain must be in the format: www.sitename.domain (e.g., www.example.com)');
+      return false;
+    }
+
+    // Check if already activated
+    if (checkDomainAlreadyActivated(trimmedDomain)) {
+      setDomainError('This domain is already activated. Please use a different domain.');
+      return false;
+    }
+
+    setDomainError('');
+    return true;
   };
 
   const handleActivateSubmit = async () => {
-    setActivatingLicense(true);
-
-    if (!domainInput.trim()) {
-      showError('Please enter a domain');
-      setActivatingLicense(false);
-      return;
-    }
+    if (isActivatingLicense) return; // Prevent multiple submissions
 
     if (!activateModal?.id) {
       showError('License ID not found');
-      setActivatingLicense(false);
       return;
     }
 
+    // Validate domain pattern and check for duplicates
+    const isValid = await validateDomain(domainInput);
+    if (!isValid) {
+      return; // Error message is set by validateDomain
+    }
+
+    const domainToActivate = domainInput.trim();
+    const licenseId = activateModal.id;
+
+    setActivatingLicense(true);
+
+    // Optimistic update - update the UI immediately
+    queryClient.setQueryData(queryKeys.licenses(userEmail), (oldData) => {
+      if (!oldData) return oldData;
+      
+      const updatedLicenses = oldData.licenses?.map((lic) => {
+        const matchId = lic.id === licenseId || 
+                       lic.license_key === licenseId || 
+                       lic.licenseKey === licenseId;
+        
+        if (matchId) {
+          return {
+            ...lic,
+            used_site_domain: domainToActivate,
+            site_domain: domainToActivate,
+            status: 'active', // Optimistically set as active
+          };
+        }
+        return lic;
+      });
+
+      return {
+        ...oldData,
+        licenses: updatedLicenses,
+      };
+    });
+
     try {
       const response = await activateLicense(
-        activateModal.id,
-        domainInput.trim(),
+        licenseId,
+        domainToActivate,
         userEmail,
       );
-      console.log('Activation response:', response);
 
-      if (response.success) {
-        showSuccess(`License activated for ${domainInput}`);
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.dashboard(userEmail),
+      if (response.success || !response.error) {
+        showSuccess(`License activated for ${domainToActivate}`);
+        
+        // Update query client state with the response data
+        queryClient.setQueryData(queryKeys.licenses(userEmail), (oldData) => {
+          if (!oldData) return oldData;
+          
+          const updatedLicenses = oldData.licenses?.map((lic) => {
+            const matchId = lic.id === licenseId || 
+                           lic.license_key === licenseId || 
+                           lic.licenseKey === licenseId ||
+                           (response.license && (
+                             lic.id === response.license.id ||
+                             lic.license_key === response.license.license_key ||
+                             lic.licenseKey === response.license.license_key
+                           ));
+            
+            if (matchId) {
+              // Update with response data if available, otherwise use optimistic data
+              return {
+                ...lic,
+                used_site_domain: response.license?.used_site_domain || domainToActivate,
+                site_domain: response.license?.site_domain || domainToActivate,
+                activated_for_site: response.license?.activated_for_site || domainToActivate,
+                status: response.license?.status || 'active',
+                ...(response.license || {}), // Merge any additional fields from response
+              };
+            }
+            return lic;
+          });
+
+          return {
+            ...oldData,
+            licenses: updatedLicenses,
+          };
         });
+
+        // Also update dashboard data to reflect the activation
+        queryClient.setQueryData(queryKeys.dashboard(userEmail), (oldData) => {
+          if (!oldData) return oldData;
+          
+          // Update sites if the response includes site data
+          if (response.site) {
+            const updatedSites = {
+              ...oldData.sites,
+              [domainToActivate]: {
+                ...oldData.sites?.[domainToActivate],
+                ...response.site,
+                status: 'active',
+              },
+            };
+            
+            return {
+              ...oldData,
+              sites: updatedSites,
+            };
+          }
+          
+          return oldData;
+        });
+
+        // Mark queries as stale to trigger re-render with updated cache data
+        // This ensures the parent component receives the updated licenses prop without refetching
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.licenses(userEmail),
+          refetchType: 'none', // Don't refetch, just use updated cache
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.dashboard(userEmail),
+          refetchType: 'none', // Don't refetch, just use updated cache
+        });
+
         handleCloseActivateModal();
       } else {
-        showError(response.message || 'Failed to activate license');
+        // Revert optimistic update on error
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.licenses(userEmail),
+        });
+        showError(response.message || response.error || 'Failed to activate license');
       }
     } catch (err) {
+      // Revert optimistic update on error
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.licenses(userEmail),
+      });
       showError('Failed to activate license: ' + (err.message || 'Unknown error'));
     } finally {
       setActivatingLicense(false);
@@ -350,49 +757,32 @@ const checkStatus = async () => {
       !license.licenseKey.toLowerCase().includes(searchQuery.toLowerCase())
     )
       return false;
-    if (billingPeriodFilter && license.billingPeriod !== billingPeriodFilter)
-      return false;
+    // Filter by billing period
+    if (billingPeriodFilter && billingPeriodFilter.trim() !== '') {
+      const filterValue = billingPeriodFilter.trim();
+      const licensePeriod = (license.billingPeriod || '').trim();
+      // Skip entries with "N/A" billing period when filtering
+      if (licensePeriod === 'N/A' || licensePeriod === '') {
+        return false;
+      }
+      // Case-insensitive comparison
+      if (licensePeriod.toLowerCase() !== filterValue.toLowerCase()) {
+        return false;
+      }
+    }
     return true;
   });
 
   return (
     <div className="licenses-container">
-      {(isActivatingLicense || isCancelling) && (
-        <div className="global-blocker">
-          <div className="global-blocker-spinner">
-            {isActivatingLicense ? 'Activating license...' : 'Cancelling subscription...'}
-          </div>
-        </div>
-      )}
 
       {/* Header */}
       <div className="licenses-header">
         <h1 className="licenses-title">
           Licence Keys
-          {isQueuePolling && (
-            <span
-              style={{
-                marginLeft: '10px',
-                fontSize: '14px',
-                color: '#666',
-                fontWeight: 'normal',
-                fontStyle: 'italic',
-              }}
-            >
-              (Processing new licenses...)
-            </span>
-          )}
         </h1>
 
         <div className="licenses-header-controls">
-          {isQueuePolling && (
-            <div className="licenses-progress-wrapper">
-              <div className="licenses-progress-bar">
-                <div className="licenses-progress-bar-inner" />
-              </div>
-            </div>
-          )}
-
           <div
             className={`licenses-search-wrapper ${
               isSearchExpanded ? 'expanded' : ''
@@ -483,23 +873,58 @@ const checkStatus = async () => {
         </div>
       </div>
 
+      {/* Progress Banner - Show when polling (all tabs) */}
+      {isQueuePolling && queueProgress && (
+        <div className="licenses-progress-banner">
+          <div className="licenses-progress-banner-content">
+            <div className="licenses-progress-banner-icon">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="2" strokeDasharray="12.566" strokeDashoffset="6.283">
+                  <animate attributeName="stroke-dashoffset" values="12.566;0;12.566" dur="1.5s" repeatCount="indefinite" />
+                </circle>
+              </svg>
+            </div>
+            <div className="licenses-progress-banner-text">
+              <strong>Creating your licenses...</strong>
+              <span>
+                {queueProgress.completed || 0} of {queueProgress.total || '?'}
+                {queueProgress.processing > 0 && ` (${queueProgress.processing} processing)`}
+              </span>
+            </div>
+            <div className="licenses-progress-banner-bar-wrapper">
+              <div className="licenses-progress-banner-bar">
+                <div 
+                  className="licenses-progress-banner-bar-fill" 
+                  style={{ 
+                    width: queueProgress.total > 0 
+                      ? `${((queueProgress.completed || 0) / queueProgress.total) * 100}%` 
+                      : '0%' 
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       <div className="licenses-table-wrapper">
         <table className="licenses-table">
-          <thead>
-            <tr>
-              <th>License Key</th>
-              <th>Billing Period</th>
-              <th>Activated for site</th>
-              <th>Created date</th>
-              <th>Expiry date</th>
-              <th></th>
-            </tr>
-          </thead>
+            <thead>
+              <tr>
+                <th>License Key</th>
+                <th>Billing Period</th>
+                <th>Platform</th>
+                <th>Activated for site</th>
+                <th>Created date</th>
+                <th>Expiry date</th>
+                <th></th>
+              </tr>
+            </thead>
           <tbody>
             {filteredLicenses.length === 0 ? (
               <tr>
-                <td colSpan="6" className="licenses-empty-cell">
+                <td colSpan="7" className="licenses-empty-cell">
                   No license keys found
                 </td>
               </tr>
@@ -518,25 +943,78 @@ const checkStatus = async () => {
                   <td>
                     <div className="license-cell-content license-key-cell">
                       <span className="license-key-text">{license.licenseKey}</span>
-                      <button
-                        className="license-view-btn"
-                        onClick={() => handleCopy(license.licenseKey)}
-                        title={
-                          copiedKey === license.licenseKey
-                            ? 'Copied!'
-                            : 'Copy license key'
-                        }
-                        disabled={license.licenseKey === 'N/A'}
-                        style={{
-                          opacity: copiedKey === license.licenseKey ? 0.6 : 1,
-                          cursor:
-                            license.licenseKey === 'N/A'
-                              ? 'not-allowed'
-                              : 'pointer',
-                        }}
-                      >
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="16" height="16" rx="3" fill="#DEE8F4"></rect><path d="M9.7333 8.46752V10.1825C9.7333 11.6117 9.16163 12.1834 7.73245 12.1834H6.01745C4.58827 12.1834 4.0166 11.6117 4.0166 10.1825V8.46752C4.0166 7.03834 4.58827 6.46667 6.01745 6.46667H7.73245C9.16163 6.46667 9.7333 7.03834 9.7333 8.46752Z" stroke="#292D32" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M12.1835 6.01751V7.73251C12.1835 9.16169 11.6118 9.73336 10.1826 9.73336H9.73348V8.46752C9.73348 7.03834 9.16181 6.46667 7.73264 6.46667H6.4668V6.01751C6.4668 4.58833 7.03847 4.01666 8.46764 4.01666H10.1826C11.6118 4.01666 12.1835 4.58833 12.1835 6.01751Z" stroke="#292D32" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                      {activeTab !== 'Cancelled' && (
+                        <button
+                          className="license-view-btn"
+                          onClick={() => handleCopy(license.licenseKey)}
+                          title={
+                            copiedKey === license.licenseKey
+                              ? 'Copied!'
+                              : 'Copy license key'
+                          }
+                          disabled={license.licenseKey === 'N/A'}
+                          style={{
+                            opacity: copiedKey === license.licenseKey ? 0.6 : 1,
+                            cursor:
+                              license.licenseKey === 'N/A'
+                                ? 'not-allowed'
+                                : 'pointer',
+                          }}
+                        >
+                        {copiedKey === license.licenseKey ? (
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <rect
+                              width="16"
+                              height="16"
+                              rx="3"
+                              fill="#10B981"
+                            />
+                            <path
+                              d="M4 8L6.5 10.5L12 5"
+                              stroke="white"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        ) : (
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <rect
+                              width="16"
+                              height="16"
+                              rx="3"
+                              fill="#DEE8F4"
+                            />
+                            <path
+                              d="M9.7333 8.46752V10.1825C9.7333 11.6117 9.16163 12.1834 7.73245 12.1834H6.01745C4.58827 12.1834 4.0166 11.6117 4.0166 10.1825V8.46752C4.0166 7.03834 4.58827 6.46667 6.01745 6.46667H7.73245C9.16163 6.46667 9.7333 7.03834 9.7333 8.46752Z"
+                              stroke="#292D32"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="M12.1835 6.01751V7.73251C12.1835 9.16169 11.6118 9.73336 10.1826 9.73336H9.73348V8.46752C9.73348 7.03834 9.16181 6.46667 7.73264 6.46667H6.4668V6.01751C6.4668 4.58833 7.03847 4.01666 8.46764 4.01666H10.1826C11.6118 4.01666 12.1835 4.58833 12.1835 6.01751Z"
+                              stroke="#292D32"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        )}
                       </button>
+                      )}
                     </div>
                   </td>
                   <td>
@@ -552,12 +1030,21 @@ const checkStatus = async () => {
                   </td>
                   <td>
                     <div className="license-cell-content">
+                      {license.platform || 'N/A'}
+                    </div>
+                  </td>
+                  <td>
+                    <div className="license-cell-content">
                       <span
                         className={
                           license.activatedForSite === 'Not Assigned'
                             ? 'not-assigned'
                             : ''
                         }
+                        style={{ 
+                          fontSize: '14px',
+                          color: license.activatedForSite === 'Not Assigned' ? '#8A1111' : '#666'
+                        }}
                       >
                         {license.activatedForSite}
                       </span>
@@ -637,19 +1124,13 @@ const checkStatus = async () => {
                                 <button
                                   className="context-menu-item context-menu-item-danger"
                                   onClick={() =>
-                                    handleCancelSubscription(
+                                    handleOpenCancelModal(
                                       license.subscriptionId,
                                       license.siteDomain,
-                                      license.licenseKey,
                                     )
                                   }
-                                  disabled={isCancelling}
                                 >
-                                  <span>
-                                    {isCancelling
-                                      ? 'Cancelling...'
-                                      : 'Cancel Subscription'}
-                                  </span>
+                                  <span>Cancel Subscription</span>
                                 </button>
                               )}
                           </div>
@@ -669,15 +1150,18 @@ const checkStatus = async () => {
         <>
           <div
             className="modal-overlay"
-            onClick={handleCloseActivateModal}
+            onClick={isActivatingLicense ? undefined : handleCloseActivateModal}
+            style={{ cursor: isActivatingLicense ? 'not-allowed' : 'pointer' }}
           />
           <div className="activate-modal">
             <div className="activate-modal-header">
               <h2 className="activate-modal-title">Activate license key</h2>
               <button
                 className="activate-modal-close"
-                onClick={handleCloseActivateModal}
+                onClick={isActivatingLicense ? undefined : handleCloseActivateModal}
                 title="Close"
+                disabled={isActivatingLicense}
+                style={{ opacity: isActivatingLicense ? 0.5 : 1, cursor: isActivatingLicense ? 'not-allowed' : 'pointer' }}
               >
                 <svg
                   width="20"
@@ -696,23 +1180,157 @@ const checkStatus = async () => {
               </button>
             </div>
             <div className="activate-modal-body">
+              {isActivatingLicense && (
+                <div className="activate-modal-loading-overlay">
+                  Activating license...
+                </div>
+              )}
               <input
                 type="text"
-                className="activate-modal-input"
-                placeholder="Add your domain"
+                className={`activate-modal-input ${domainError ? 'error' : ''}`}
+                placeholder="www.sitename.domain (e.g., www.example.com)"
                 value={domainInput}
-                onChange={(e) => setDomainInput(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleActivateSubmit()}
+                onChange={handleDomainInputChange}
+                onBlur={() => {
+                  if (domainInput.trim()) {
+                    validateDomain(domainInput);
+                  }
+                }}
+                onKeyPress={(e) => e.key === 'Enter' && !isActivatingLicense && handleActivateSubmit()}
                 autoFocus
+                disabled={isActivatingLicense}
+                style={{
+                  opacity: isActivatingLicense ? 0.6 : 1,
+                  pointerEvents: isActivatingLicense ? 'none' : 'auto',
+                }}
               />
+              {domainError && (
+                <div className="activate-modal-error">
+                  {domainError}
+                </div>
+              )}
 
               <button
-                className="activate-modal-submit"
+                className={`activate-modal-submit ${isActivatingLicense ? 'activating' : ''}`}
                 onClick={handleActivateSubmit}
                 disabled={isActivatingLicense}
               >
-                Submit
+                {isActivatingLicense ? (
+                  <>
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="activate-spinner"
+                    >
+                      <circle
+                        cx="8"
+                        cy="8"
+                        r="7"
+                        stroke="#fff"
+                        strokeWidth="2"
+                        strokeDasharray="43.98"
+                        strokeDashoffset="10"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    Activating...
+                  </>
+                ) : (
+                  'Submit'
+                )}
               </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Cancel Subscription Modal */}
+      {cancelModal !== null && (
+        <>
+          <div
+            className="modal-overlay"
+            onClick={isCancelling ? undefined : handleCloseCancelModal}
+            style={{ cursor: isCancelling ? 'not-allowed' : 'pointer' }}
+          />
+          <div className="cancel-modal">
+            <div className="cancel-modal-header">
+              <h2 className="cancel-modal-title">Cancel Subscription</h2>
+              <button
+                className="cancel-modal-close"
+                onClick={isCancelling ? undefined : handleCloseCancelModal}
+                title="Close"
+                disabled={isCancelling}
+                style={{ opacity: isCancelling ? 0.5 : 1, cursor: isCancelling ? 'not-allowed' : 'pointer' }}
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M15 5L5 15M5 5L15 15"
+                    stroke="#666"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div className="cancel-modal-body">
+              <p className="cancel-modal-message">
+                Are you sure you want to cancel the subscription for{' '}
+                <strong>"{cancelModal.siteDomain}"</strong>?
+              </p>
+              <div className="cancel-modal-actions">
+                <button
+                  className="cancel-modal-cancel-btn"
+                  onClick={handleCloseCancelModal}
+                  disabled={isCancelling}
+                  style={{
+                    opacity: isCancelling ? 0.6 : 1,
+                    pointerEvents: isCancelling ? 'none' : 'auto',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className={`cancel-modal-confirm-btn ${isCancelling ? 'cancelling' : ''}`}
+                  onClick={handleCancelSubscription}
+                  disabled={isCancelling}
+                >
+                  {isCancelling ? (
+                    <>
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="cancel-spinner"
+                      >
+                        <circle
+                          cx="8"
+                          cy="8"
+                          r="7"
+                          stroke="#fff"
+                          strokeWidth="2"
+                          strokeDasharray="43.98"
+                          strokeDashoffset="10"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      Cancelling...
+                    </>
+                  ) : (
+                    'Confirm Cancellation'
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </>
