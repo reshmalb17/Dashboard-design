@@ -6,23 +6,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys, useLicenses } from '../hooks/useDashboardQueries';
 
 export default function Subscriptions({ dashboardData, userEmail }) {
-  // Debug: Log received data
-  useEffect(() => {
-    console.log('[Subscriptions] dashboardData received:', dashboardData);
-    console.log('[Subscriptions] userEmail:', userEmail);
-  }, [dashboardData, userEmail]);
-  
   // Handle both array and object formats for subscriptions
   const subscriptionsRaw = dashboardData?.subscriptions || {};
   const subscriptions = Array.isArray(subscriptionsRaw) 
     ? subscriptionsRaw 
     : Object.values(subscriptionsRaw);
-  
-  // Debug: Log processed subscriptions
-  useEffect(() => {
-    console.log('[Subscriptions] Processed subscriptions:', subscriptions);
-    console.log('[Subscriptions] Subscriptions count:', subscriptions.length);
-  }, [subscriptions]);
   
   // Also get subscriptions as object for detailed access
   const subscriptionsObj = Array.isArray(subscriptionsRaw)
@@ -30,12 +18,6 @@ export default function Subscriptions({ dashboardData, userEmail }) {
     : subscriptionsRaw;
   
   const sites = dashboardData?.sites || {};
-  
-  // Debug: Log sites
-  useEffect(() => {
-    console.log('[Subscriptions] Sites:', sites);
-    console.log('[Subscriptions] Sites count:', Object.keys(sites).length);
-  }, [sites]);
   
   // Memoize backendPendingSites to prevent unnecessary re-renders
   const backendPendingSites = useMemo(() => {
@@ -46,13 +28,6 @@ export default function Subscriptions({ dashboardData, userEmail }) {
   const { data: licensesData, isLoading: loadingLicenses, error: licensesError } = useLicenses(userEmail, { enabled: !!userEmail });
   const licenses = licensesData?.licenses || [];
   
-  // Debug: Log licenses
-  useEffect(() => {
-    console.log('[Subscriptions] Licenses:', licenses);
-    console.log('[Subscriptions] Licenses count:', licenses.length);
-    console.log('[Subscriptions] Loading licenses:', loadingLicenses);
-    console.log('[Subscriptions] Licenses error:', licensesError);
-  }, [licenses, loadingLicenses, licensesError]);
   const { showSuccess, showError } = useNotification();
   const queryClient = useQueryClient();
 

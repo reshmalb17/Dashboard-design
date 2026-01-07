@@ -61,11 +61,10 @@ export function useMemberstack() {
               return currentMember;
             }
             
-            // If no current member but we had one before, keep the previous one
-            // Don't clear state unless we're sure the session is invalid
-            // This prevents losing data during temporary SDK issues
+            // If no current member but we had one before, clear it (session expired/logged out)
+            // Always clear when currentMember is null to prevent unauthorized access
             if (!currentMember) {
-              return prevMember; // Keep previous member instead of clearing
+              return null; // Clear member when session is invalid
             }
             
             // Compare IDs first (fast check)
@@ -127,10 +126,7 @@ export function useMemberstack() {
               // Throttle auth change checks to prevent excessive calls
               if (now - lastAuthCheck > AUTH_CHECK_THROTTLE) {
                 lastAuthCheck = now;
-                console.log('[Memberstack] Auth state changed:', authData);
                 checkSession();
-              } else {
-                console.log('[Memberstack] Auth change throttled, skipping...');
               }
             }
           });
@@ -149,7 +145,6 @@ export function useMemberstack() {
         try {
           const expired = await isSessionExpired();
           if (expired) {
-            console.log('[Memberstack] Session expired, refreshing...');
             await refreshSession();
             checkSession(true); // Skip loading state
           }
@@ -172,7 +167,6 @@ export function useMemberstack() {
         const now = Date.now();
         // Throttle visibility checks to prevent excessive calls
         if (now - lastVisibilityCheck < VISIBILITY_CHECK_THROTTLE) {
-          console.log('[useMemberstack] Visibility change throttled, skipping...');
           return;
         }
         lastVisibilityCheck = now;
@@ -207,7 +201,6 @@ export function useMemberstack() {
       // Throttle ready event to prevent excessive checks
       if (now - readyEventThrottle > 2000) {
         readyEventThrottle = now;
-        console.log('[useMemberstack] Memberstack ready event received');
         checkSession();
       }
     };
@@ -220,7 +213,6 @@ export function useMemberstack() {
     const handleLogin = async () => {
       if (mounted && !loginEventHandled) {
         loginEventHandled = true;
-        console.log('[useMemberstack] Login event received, checking session immediately');
         
         // Clear any pending timeout
         if (loginEventTimeout) {
@@ -236,8 +228,6 @@ export function useMemberstack() {
           // Reset flag after check completes
           loginEventHandled = false;
         }, 500);
-      } else {
-        console.log('[useMemberstack] Login event already being handled, ignoring duplicate');
       }
     };
     window.addEventListener('memberstack:login', handleLogin);
@@ -245,7 +235,6 @@ export function useMemberstack() {
     // Handle logout event - clear member state immediately
     const handleLogout = () => {
       if (mounted) {
-        console.log('[useMemberstack] Logout event received, clearing member state');
         setMember(null);
         setLoading(false);
         setError(null);

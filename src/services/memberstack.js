@@ -6,7 +6,6 @@
 // Dynamic import Memberstack DOM to prevent blocking page load
 import('@memberstack/dom').then(m => {
   window.__memberstackDOM = m.default || m;
-  console.log('[Memberstack] SDK module imported successfully');
 }).catch(error => {
   console.error('[Memberstack] ❌ Failed to import SDK:', error);
   console.error('[Memberstack] Error details:', {
@@ -29,10 +28,12 @@ function getMemberstackDOM() {
 // Using existing server - same as consentbit-dashboard-1
 const API_BASE = import.meta.env.VITE_API_BASE || 'https://consentbit-dashboard-test.web-8fb.workers.dev';
 
-// Memberstack public key (from App ID: app_clz9z3q4t00fl0sos3fhy0wft)
-// The public key format is typically: pk_sb_xxxxx
-// For now, we'll use the App ID format and let Memberstack handle it
-const MEMBERSTACK_PUBLIC_KEY = import.meta.env.VITE_MEMBERSTACK_PUBLIC_KEY || 'pk_sb_241f0857ee78032a21c3';
+// Memberstack public key
+// Test Mode: pk_sb_xxxxx (starts with pk_sb_)
+// Production Mode: pk_live_xxxxx (starts with pk_live_)
+// Set via environment variable: VITE_MEMBERSTACK_PUBLIC_KEY
+// Current test key: pk_sb_1f9717616667ce56e24c
+const MEMBERSTACK_PUBLIC_KEY = import.meta.env.VITE_MEMBERSTACK_PUBLIC_KEY || 'pk_sb_1f9717616667ce56e24c';
 
 // Initialize Memberstack SDK instance
 let memberstackInstance = null;
@@ -42,17 +43,13 @@ function initMemberstack() {
   if (!memberstackInstance) {
     try {
       const dom = getMemberstackDOM();
-      console.log('[Memberstack] DOM module:', dom);
       if (dom && dom.init) {
         memberstackInstance = dom.init({
           publicKey: MEMBERSTACK_PUBLIC_KEY,
           useCookies: true,                // Enable cookie persistence
           setCookieOnRootDomain: true,     // Optional: set cookies on root domain
-          sessionDurationDays: 0.5,        // How long sessions last (12 hours)
+          sessionDurationDays: 7,           // How long sessions last (7 days)
         });
-        console.log('[Memberstack] SDK initialized programmatically');
-        console.log('[Memberstack] Initialized instance:', memberstackInstance);
-        console.log('[Memberstack] Instance methods:', memberstackInstance ? Object.keys(memberstackInstance) : 'null');
       } else {
         // SDK not loaded yet, will retry
         console.warn('[Memberstack] SDK not available yet, will retry. DOM:', dom);
@@ -104,20 +101,16 @@ let cachedSDKInstance = null;
 export async function waitForSDK() {
   // If we already have a cached instance, return it immediately
   if (cachedSDKInstance) {
-    console.log('[Memberstack] waitForSDK: Returning cached SDK instance');
     return cachedSDKInstance;
   }
   
   // If there's already a pending promise, return it (prevents multiple concurrent initializations)
   if (sdkPromise) {
-    console.log('[Memberstack] waitForSDK: SDK initialization already in progress, waiting...');
     return sdkPromise;
   }
   
   // Create a new promise for SDK initialization
   sdkPromise = (async () => {
-    console.log('[Memberstack] waitForSDK: Starting initialization...');
-    
     // Wait for dynamic import to complete
     let importAttempts = 0;
     const maxImportAttempts = 20; // Increased from 10
@@ -126,20 +119,12 @@ export async function waitForSDK() {
       importAttempts++;
     }
     
-    if (!window.__memberstackDOM) {
-      console.warn('[Memberstack] Dynamic import not completed after', maxImportAttempts, 'attempts');
-    } else {
-      console.log('[Memberstack] Dynamic import completed');
-    }
-    
     // Initialize SDK
     const memberstack = initMemberstack();
     
     if (memberstack) {
-      console.log('[Memberstack] SDK instance created, checking methods...');
       // If SDK has required methods, return immediately (don't wait for onReady)
       if (memberstack.getCurrentMember || memberstack.member || memberstack.loginWithEmail) {
-        console.log('[Memberstack] SDK has required methods, waiting for onReady...');
         // Try to wait for onReady with a longer timeout
         if (memberstack.onReady && typeof memberstack.onReady.then === 'function') {
           // Race between onReady and a longer timeout
@@ -148,12 +133,10 @@ export async function waitForSDK() {
               memberstack.onReady,
               new Promise(resolve => setTimeout(resolve, 3000)) // 3 second max wait
             ]);
-            console.log('[Memberstack] SDK onReady completed');
           } catch (error) {
-            console.warn('[Memberstack] onReady promise rejected:', error);
+            // Continue anyway - SDK might still work
           }
         }
-        console.log('[Memberstack] SDK initialization complete, caching instance');
         cachedSDKInstance = memberstack;
         return memberstack;
       } else {
@@ -164,7 +147,6 @@ export async function waitForSDK() {
     }
     
     // Fallback: Polling with more attempts
-    console.log('[Memberstack] Trying fallback polling...');
     let pollAttempts = 0;
     const maxAttempts = 20; // Increased from 10
     const interval = 150; // Slightly longer interval
@@ -174,7 +156,6 @@ export async function waitForSDK() {
       
       if (sdk) {
         if (sdk.getCurrentMember || sdk.member || sdk.loginWithEmail) {
-          console.log('[Memberstack] SDK found via polling at attempt', pollAttempts + 1);
           cachedSDKInstance = sdk;
           return sdk;
         }
@@ -189,10 +170,7 @@ export async function waitForSDK() {
     // Final check
     const finalSDK = getMemberstackSDK();
     if (finalSDK) {
-      console.log('[Memberstack] SDK found in final check');
       cachedSDKInstance = finalSDK;
-    } else {
-      console.error('[Memberstack] SDK not found in final check');
     }
     return finalSDK;
   })();
@@ -210,44 +188,26 @@ export async function waitForSDK() {
 // Check if user is logged in via Memberstack
 export async function checkMemberstackSession() {
   try {
-    console.log('[Memberstack] checkMemberstackSession: Starting...');
     const memberstack = await waitForSDK();
     
     if (!memberstack) {
-      console.warn('[Memberstack] SDK not loaded in checkMemberstackSession');
       return null;
     }
-    
-    console.log('[Memberstack] SDK loaded, checking for onReady...');
     
     // Wait for SDK to be ready with timeout (don't wait indefinitely)
     if (memberstack.onReady && typeof memberstack.onReady.then === 'function') {
       try {
-        console.log('[Memberstack] Waiting for SDK onReady...');
         await Promise.race([
           memberstack.onReady,
           new Promise(resolve => setTimeout(resolve, 3000)) // 3 second timeout
         ]);
-        console.log('[Memberstack] SDK onReady completed');
       } catch (error) {
-        console.warn('[Memberstack] onReady error:', error);
         // Continue anyway - SDK might still work
       }
     } else {
       // If onReady is not available, wait a bit for SDK to initialize
-      console.log('[Memberstack] onReady not available, waiting 800ms for SDK initialization...');
       await new Promise(resolve => setTimeout(resolve, 800));
     }
-    
-    console.log('[Memberstack] Attempting to get current member...');
-    
-    // Check for session cookies first (for debugging)
-    const cookies = document.cookie;
-    const hasMemberstackCookie = cookies.includes('_ms-mem') || cookies.includes('_ms-token');
-    console.log('[Memberstack] Cookie check:', {
-      hasCookies: hasMemberstackCookie,
-      cookieString: cookies.substring(0, 200) // First 200 chars
-    });
     
     // Get current member - try multiple methods
     let member = null;
@@ -255,21 +215,11 @@ export async function checkMemberstackSession() {
     // Method 1: memberstack.getCurrentMember (npm package method)
     if (memberstack.getCurrentMember && typeof memberstack.getCurrentMember === 'function') {
       try {
-        console.log('[Memberstack] Trying getCurrentMember()...');
         const memberResult = await memberstack.getCurrentMember();
-        console.log('[Memberstack] getCurrentMember result:', {
-          hasData: !!memberResult,
-          hasDataData: !!(memberResult?.data),
-          keys: memberResult ? Object.keys(memberResult) : [],
-          fullResult: memberResult
-        });
         member = memberResult;
       } catch (error) {
-        console.warn('[Memberstack] Error with getCurrentMember:', error);
-        console.warn('[Memberstack] Error details:', error.message, error.stack);
+        // Continue to try other methods
       }
-    } else {
-      console.warn('[Memberstack] getCurrentMember method not available');
     }
     
     // Method 2: memberstack.member (alternative npm package method)
@@ -281,7 +231,7 @@ export async function checkMemberstackSession() {
           member = memberstack.member;
         }
       } catch (error) {
-        console.warn('[Memberstack] Error with member:', error);
+        // Continue to try other methods
       }
     }
     
@@ -290,27 +240,13 @@ export async function checkMemberstackSession() {
       try {
         member = await window.memberstack.getCurrentMember();
       } catch (error) {
-        console.warn('[Memberstack] Error with window.memberstack:', error);
+        // Continue to try other methods
       }
     }
     
     // Handle Memberstack v2 SDK response structure: {data: {...}}
     if (member && member.data) {
-      console.log('[Memberstack] Unwrapping member.data structure');
       member = member.data;
-    }
-    
-    // Log member structure for debugging
-    if (member) {
-      console.log('[Memberstack] Member structure:', {
-        hasId: !!(member.id || member._id),
-        hasEmail: !!(member.email || member._email || member.data?.email || member.data?.auth?.email),
-        keys: Object.keys(member),
-        email: member.email || member._email || member.data?.email || member.data?.auth?.email || 'NOT FOUND',
-        fullMember: member
-      });
-    } else {
-      console.log('[Memberstack] No member found in session');
     }
     
     // Accept member if we have ID or email
@@ -320,7 +256,6 @@ export async function checkMemberstackSession() {
     
     return null;
   } catch (error) {
-    console.error('[Memberstack] Error checking session:', error);
     return null;
   }
 }
@@ -328,15 +263,6 @@ export async function checkMemberstackSession() {
 // Get user email from Memberstack member (normalized like reference dashboard)
 export function getUserEmail(member) {
   if (!member) return null;
-  
-  // Log member structure for debugging email extraction
-  console.log('[Memberstack] getUserEmail: Checking member structure:', {
-    hasData: !!member.data,
-    hasAuth: !!member.data?.auth,
-    keys: Object.keys(member),
-    dataKeys: member.data ? Object.keys(member.data) : [],
-    authKeys: member.data?.auth ? Object.keys(member.data.auth) : []
-  });
   
   // Try multiple possible email fields (matching reference dashboard)
   // Check in order of most likely locations
@@ -354,27 +280,7 @@ export function getUserEmail(member) {
   // Normalize email (lowercase and trim) - matching reference dashboard
   if (email) {
     const normalized = email.toLowerCase().trim();
-    console.log('[Memberstack] getUserEmail: Found email:', normalized);
     return normalized;
-  }
-  
-  // If no email found, log all possible email-like fields for debugging
-  console.warn('[Memberstack] getUserEmail: No email found. Checking all string fields...');
-  const allStringFields = {};
-  const checkFields = (obj, prefix = '') => {
-    if (!obj || typeof obj !== 'object') return;
-    for (const [key, value] of Object.entries(obj)) {
-      const fullKey = prefix ? `${prefix}.${key}` : key;
-      if (typeof value === 'string' && value.includes('@')) {
-        allStringFields[fullKey] = value;
-      } else if (typeof value === 'object' && value !== null) {
-        checkFields(value, fullKey);
-      }
-    }
-  };
-  checkFields(member);
-  if (Object.keys(allStringFields).length > 0) {
-    console.log('[Memberstack] getUserEmail: Found email-like fields:', allStringFields);
   }
   
   return null;
@@ -392,10 +298,8 @@ export async function loginWithEmailPassword(email, password) {
     
     // Method: loginMemberEmailPassword (correct Memberstack method)
     if (memberstack.loginMemberEmailPassword && typeof memberstack.loginMemberEmailPassword === 'function') {
-      console.log('[Memberstack] Using loginMemberEmailPassword method');
       try {
         const response = await memberstack.loginMemberEmailPassword({ email, password });
-        console.log('[Memberstack] loginMemberEmailPassword response:', response);
         if (response && response.data) {
           return { success: true, data: response.data };
         } else if (response && response.errors) {
@@ -428,10 +332,8 @@ export async function signupWithEmailPassword(email, password) {
     
     // Method: signupMemberEmailPassword (correct Memberstack method)
     if (memberstack.signupMemberEmailPassword && typeof memberstack.signupMemberEmailPassword === 'function') {
-      console.log('[Memberstack] Using signupMemberEmailPassword method');
       try {
         const response = await memberstack.signupMemberEmailPassword({ email, password });
-        console.log('[Memberstack] signupMemberEmailPassword response:', response);
         if (response && response.data) {
           return { success: true, data: response.data };
         } else if (response && response.errors) {
@@ -462,26 +364,19 @@ export async function sendLoginCode(email) {
       return { success: false, error: 'SDK not available' };
     }
     
-    // Debug: Log all available methods
-    console.log('[Memberstack] Available methods:', Object.keys(memberstack));
-    console.log('[Memberstack] SDK instance:', memberstack);
-    
     // Method 1: Try sendMemberLoginPasswordlessEmail first (for existing members)
     let loginError = null;
     let loginErrorCode = null;
     
     if (memberstack.sendMemberLoginPasswordlessEmail && typeof memberstack.sendMemberLoginPasswordlessEmail === 'function') {
-      console.log('[Memberstack] Trying sendMemberLoginPasswordlessEmail method (for existing members)');
       try {
         const response = await memberstack.sendMemberLoginPasswordlessEmail({ email });
-        console.log('[Memberstack] sendMemberLoginPasswordlessEmail full response:', JSON.stringify(response, null, 2));
         
         if (response && response.data) {
           return { success: true, data: response.data };
         } else if (response && response.errors && response.errors.length > 0) {
           const errorMessage = response.errors[0]?.message || response.errors[0] || 'Failed to send code';
           const errorCode = response.errors[0]?.code || '';
-          console.log('[Memberstack] Login method error:', errorMessage, 'Code:', errorCode);
           
           // Store error but continue to try signup if member not found
           if (errorMessage.toLowerCase().includes('not found') || 
@@ -490,7 +385,6 @@ export async function sendLoginCode(email) {
               errorCode === 'passwordless-email-not-found') {
             loginError = errorMessage;
             loginErrorCode = errorCode;
-            console.log('[Memberstack] Member not found for passwordless login, will try signup method...');
           } else {
             return { success: false, error: errorMessage };
           }
@@ -499,18 +393,9 @@ export async function sendLoginCode(email) {
           return { success: true };
         }
       } catch (error) {
-        console.error('[Memberstack] sendMemberLoginPasswordlessEmail exception:', error);
         // Extract error message and code - handle different error structures
         const errorMessage = error.message || (error.errors && error.errors[0]?.message) || error.toString() || 'Failed to send code';
         const errorCode = error.code || (error.errors && error.errors[0]?.code) || '';
-        console.log('[Memberstack] Exception details:', {
-          message: error.message,
-          code: error.code,
-          errors: error.errors,
-          fullError: error,
-          stack: error.stack,
-          response: error.response
-        });
         
         // If member not found, try signup method
         // Check for passwordless-email-not-found which means member exists but not configured for passwordless
@@ -520,12 +405,10 @@ export async function sendLoginCode(email) {
             errorCode === 'passwordless-email-not-found') {
           loginError = errorMessage;
           loginErrorCode = errorCode;
-          console.log('[Memberstack] Member not found for passwordless (code:', errorCode, '), will try signup method...');
         } else {
           // For other errors, still try signup as fallback
           loginError = errorMessage;
           loginErrorCode = errorCode;
-          console.log('[Memberstack] Other error occurred, will try signup as fallback...');
         }
       }
     }
@@ -533,23 +416,14 @@ export async function sendLoginCode(email) {
     // Method 1b: Try sendMemberSignupPasswordlessEmail (for new members or if login failed with "not found")
     // This method can work for existing members too - it will send a code if the member exists
     if (memberstack.sendMemberSignupPasswordlessEmail && typeof memberstack.sendMemberSignupPasswordlessEmail === 'function') {
-      console.log('[Memberstack] Trying sendMemberSignupPasswordlessEmail method (works for both new and existing members)');
       try {
         const response = await memberstack.sendMemberSignupPasswordlessEmail({ email });
-        console.log('[Memberstack] sendMemberSignupPasswordlessEmail full response:', JSON.stringify(response, null, 2));
-        
-        // Check response structure more carefully
-        console.log('[Memberstack] Signup method response type:', typeof response);
-        console.log('[Memberstack] Signup method response keys:', response ? Object.keys(response) : 'null');
         
         if (response && response.data) {
-          console.log('[Memberstack] Successfully sent passwordless code via signup method');
-          console.log('[Memberstack] Response data:', response.data);
           return { success: true, data: response.data };
         } else if (response && response.errors && response.errors.length > 0) {
           const errorMessage = response.errors[0]?.message || response.errors[0] || 'Failed to send code';
           const errorCode = response.errors[0]?.code || '';
-          console.log('[Memberstack] Signup method error:', errorMessage, 'Code:', errorCode);
           
           // If both login and signup failed, return the most specific error
           if (loginError) {
@@ -561,26 +435,17 @@ export async function sendLoginCode(email) {
           return { success: false, error: errorMessage };
         } else if (response === null || response === undefined) {
           // Null/undefined response might still mean success in some cases
-          console.log('[Memberstack] Signup method returned null/undefined - assuming success');
           return { success: true };
         } else if (response === true || response === false) {
           // Boolean response
-          console.log('[Memberstack] Signup method returned boolean:', response);
           return { success: response };
         } else {
-          // Any other response structure - log it and assume success if no errors
-          console.log('[Memberstack] Signup method succeeded (unexpected response structure):', response);
+          // Any other response structure - assume success if no errors
           return { success: true };
         }
       } catch (error) {
-        console.error('[Memberstack] sendMemberSignupPasswordlessEmail exception:', error);
         const errorMessage = error.message || error.toString() || 'Failed to send code';
         const errorCode = error.code || '';
-        console.log('[Memberstack] Signup exception details:', {
-          message: error.message,
-          code: error.code,
-          stack: error.stack
-        });
         
         // If both methods failed, return combined error
         if (loginError) {
@@ -593,7 +458,6 @@ export async function sendLoginCode(email) {
       }
     } else if (loginError) {
       // Login failed with "not found" but no signup method available
-      console.warn('[Memberstack] Login failed and signup method not available');
       return { 
         success: false, 
         error: `The email is not set up for passwordless login. Error: ${loginError}. Please configure passwordless authentication in Memberstack or use an alternative login method.` 
@@ -603,12 +467,10 @@ export async function sendLoginCode(email) {
     // Method 2: Check if methods are nested in different structure
     if (memberstack.auth && typeof memberstack.auth === 'object') {
       if (memberstack.auth.loginWithEmail && typeof memberstack.auth.loginWithEmail === 'function') {
-        console.log('[Memberstack] Using auth.loginWithEmail method');
         try {
           const response = await memberstack.auth.loginWithEmail({ email });
           return { success: true, data: response };
         } catch (error) {
-          console.error('[Memberstack] auth.loginWithEmail error:', error);
           return { success: false, error: error.message };
         }
       }
@@ -617,12 +479,10 @@ export async function sendLoginCode(email) {
     // Method 3: passwordless methods
     if (memberstack.passwordless && typeof memberstack.passwordless === 'object') {
       if (memberstack.passwordless.sendCode && typeof memberstack.passwordless.sendCode === 'function') {
-        console.log('[Memberstack] Using passwordless.sendCode method');
         try {
           await memberstack.passwordless.sendCode({ email });
           return { success: true };
         } catch (error) {
-          console.error('[Memberstack] passwordless.sendCode error:', error);
           return { success: false, error: error.message };
         }
       }
@@ -630,18 +490,15 @@ export async function sendLoginCode(email) {
     
     // Method 4: sendMagicLink
     if (memberstack.sendMagicLink && typeof memberstack.sendMagicLink === 'function') {
-      console.log('[Memberstack] Using sendMagicLink method (fallback)');
       try {
         await memberstack.sendMagicLink({ email });
         return { success: true };
       } catch (error) {
-        console.error('[Memberstack] sendMagicLink error:', error);
         return { success: false, error: error.message };
       }
     }
     
     // Method 5: Try direct API call if SDK methods don't work
-    console.warn('[Memberstack] No SDK method found. Trying direct API call...');
     try {
       const response = await fetch('https://api.memberstack.com/v1/auth/passwordless', {
         method: 'POST',
@@ -659,13 +516,11 @@ export async function sendLoginCode(email) {
         return { success: false, error: errorData.message || 'Failed to send code' };
       }
     } catch (apiError) {
-      console.error('[Memberstack] Direct API call error:', apiError);
+      // API call failed, continue to return error
     }
     
-    console.warn('[Memberstack] No method found to send login code. Available methods:', Object.keys(memberstack));
-    return { success: false, error: 'Login method not available. Please check console for available methods.' };
+    return { success: false, error: 'Login method not available' };
   } catch (error) {
-    console.error('[Memberstack] Error sending login code:', error);
     return { success: false, error: error.message || 'Unknown error' };
   }
 }
@@ -682,10 +537,8 @@ export async function verifyLoginCode(email, code) {
     
     // Method 1: loginMemberPasswordless (correct Memberstack method)
     if (memberstack.loginMemberPasswordless && typeof memberstack.loginMemberPasswordless === 'function') {
-      console.log('[Memberstack] Using loginMemberPasswordless method');
       try {
         const response = await memberstack.loginMemberPasswordless({ email, passwordlessToken: code });
-        console.log('[Memberstack] loginMemberPasswordless response:', response);
         if (response && response.data) {
           return { success: true, data: response.data };
         } else if (response && response.errors) {
@@ -693,27 +546,22 @@ export async function verifyLoginCode(email, code) {
         }
         return { success: true };
       } catch (error) {
-        console.error('[Memberstack] loginMemberPasswordless error:', error);
         return { success: false, error: error.message || 'Verification failed' };
       }
     }
     
     // Fallback methods
     if (memberstack.verifyCode && typeof memberstack.verifyCode === 'function') {
-      console.log('[Memberstack] Using verifyCode method (fallback)');
       try {
         const result = await memberstack.verifyCode({ email, code });
         return { success: !!result, data: result };
       } catch (error) {
-        console.error('[Memberstack] verifyCode error:', error);
         return { success: false, error: error.message };
       }
     }
     
-    console.warn('[Memberstack] No method found to verify code. Available methods:', Object.keys(memberstack));
     return { success: false, error: 'Verification method not available' };
   } catch (error) {
-    console.error('[Memberstack] Error verifying code:', error);
     return { success: false, error: error.message || 'Unknown error' };
   }
 }
@@ -728,28 +576,21 @@ export async function openLoginModal() {
       return;
     }
     
-    // Debug: Log available methods
-    console.log('[Memberstack] Available methods:', Object.keys(memberstack));
-    console.log('[Memberstack] Memberstack instance:', memberstack);
-    
     // Try different methods to open login modal
     // Method 1: openModal (common in Memberstack SDK)
     if (memberstack.openModal && typeof memberstack.openModal === 'function') {
-      console.log('[Memberstack] Using openModal method');
       await memberstack.openModal('login');
       return;
     }
     
     // Method 2: modal (alternative method)
     if (memberstack.modal && typeof memberstack.modal === 'function') {
-      console.log('[Memberstack] Using modal method');
       await memberstack.modal('login');
       return;
     }
     
     // Method 3: login (direct login method)
     if (memberstack.login && typeof memberstack.login === 'function') {
-      console.log('[Memberstack] Using login method');
       await memberstack.login();
       return;
     }
@@ -757,23 +598,18 @@ export async function openLoginModal() {
     // Method 4: Check for UI methods
     if (memberstack.ui && typeof memberstack.ui === 'object') {
       if (memberstack.ui.open && typeof memberstack.ui.open === 'function') {
-        console.log('[Memberstack] Using ui.open method');
         await memberstack.ui.open('login');
         return;
       }
       if (memberstack.ui.login && typeof memberstack.ui.login === 'function') {
-        console.log('[Memberstack] Using ui.login method');
         await memberstack.ui.login();
         return;
       }
     }
     
-    // If no modal method found, log available methods and redirect
-    console.warn('[Memberstack] No login modal method found. Available methods:', Object.keys(memberstack));
-    console.warn('[Memberstack] Redirecting to login page');
+    // If no modal method found, redirect to login page
     window.location.href = '/';
   } catch (error) {
-    console.error('[Memberstack] Error opening login modal:', error);
     // Fallback: redirect to login page
     window.location.href = '/';
   }
@@ -825,13 +661,11 @@ export async function refreshSession() {
     // Check current member to refresh session
     const member = await checkMemberstackSession();
     if (member) {
-      console.log('[Memberstack] Session refreshed');
       return true;
     }
     
     return false;
   } catch (error) {
-    console.error('[Memberstack] Error refreshing session:', error);
     return false;
   }
 }
@@ -856,23 +690,18 @@ export async function isSessionExpired() {
 // Logout from Memberstack (enhanced session management)
 export async function logout() {
   try {
-    console.log('[Memberstack] Starting logout process...');
-    
     // Get Memberstack SDK instance
     const memberstack = await waitForSDK();
     
     // Step 1: Call Memberstack logout method (this handles server-side session)
+    // The SDK logout method handles server-side session cleanup automatically
     if (memberstack && memberstack.logout && typeof memberstack.logout === 'function') {
       try {
-        console.log('[Memberstack] Calling memberstack.logout()...');
+        // SDK logout handles server-side session - no options needed
         await memberstack.logout();
-        console.log('[Memberstack] Memberstack logout completed');
       } catch (logoutError) {
-        console.warn('[Memberstack] Error during memberstack.logout():', logoutError);
         // Continue with cleanup even if logout fails
       }
-    } else {
-      console.warn('[Memberstack] memberstack.logout() method not available');
     }
     
     // Step 2: Clear all Memberstack-related localStorage items
@@ -880,7 +709,6 @@ export async function logout() {
     localStorageKeys.forEach(key => {
       if (key.startsWith('_ms-') || key.startsWith('memberstack-') || key.includes('memberstack')) {
         localStorage.removeItem(key);
-        console.log(`[Memberstack] Removed localStorage key: ${key}`);
       }
     });
     
@@ -889,7 +717,6 @@ export async function logout() {
     sessionStorageKeys.forEach(key => {
       if (key.startsWith('_ms-') || key.startsWith('memberstack-') || key.includes('memberstack')) {
         sessionStorage.removeItem(key);
-        console.log(`[Memberstack] Removed sessionStorage key: ${key}`);
       }
     });
     
@@ -914,23 +741,19 @@ export async function logout() {
       document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.${rootDomain};`;
       // Clear cookie for current domain
       document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=${domain};`;
-      console.log(`[Memberstack] Cleared cookie: ${cookieName}`);
     });
     
     // Step 5: Dispatch logout event for UI updates
     try {
       window.dispatchEvent(new CustomEvent('memberstack:logout'));
-      console.log('[Memberstack] Dispatched memberstack:logout event');
     } catch (eventError) {
-      console.warn('[Memberstack] Failed to dispatch logout event:', eventError);
+      // Event dispatch failed, continue anyway
     }
     
     // Step 6: Clear any cached session data
     if (window.memberstackSessionCache) {
       delete window.memberstackSessionCache;
     }
-    
-    console.log('[Memberstack] Logout completed, all sessions and storage cleared');
     
     // Step 7: Redirect to login page (home page)
     // Small delay to ensure all cleanup completes
@@ -939,8 +762,6 @@ export async function logout() {
     }, 100);
     
   } catch (error) {
-    console.error('[Memberstack] Logout error:', error);
-    
     // Emergency cleanup: Clear everything and redirect
     try {
       // Clear all storage
@@ -956,10 +777,8 @@ export async function logout() {
       
       // Dispatch logout event
       window.dispatchEvent(new CustomEvent('memberstack:logout'));
-      
-      console.log('[Memberstack] Emergency cleanup completed');
     } catch (cleanupError) {
-      console.error('[Memberstack] Emergency cleanup failed:', cleanupError);
+      // Cleanup failed, continue to redirect
     }
     
     // Redirect regardless of errors
@@ -988,7 +807,7 @@ export async function getAPISessionToken(userEmail) {
       }
     }
   } catch (error) {
-    console.warn('[Memberstack] Could not get API session token:', error);
+    // API call failed, return null
   }
   
   return null;

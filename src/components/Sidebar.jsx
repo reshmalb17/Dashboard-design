@@ -4,9 +4,6 @@ import { logout } from '../services/memberstack';
 export default function Sidebar({ activeSection, onSectionChange, userEmail, isOpen = false }) {
   const handleLogout = async () => {
     try {
-      // Show loading state (optional - you can add a loading indicator)
-      console.log('[Sidebar] Logging out...');
-      
       // Call logout function which handles Memberstack session logout and cleanup
       await logout();
       
@@ -20,8 +17,8 @@ export default function Sidebar({ activeSection, onSectionChange, userEmail, isO
   };
   const sections = [
     { id: 'dashboard', label: 'Dashboard' },
-    { id: 'domains', label: 'Domains' },
-    { id: 'licenses', label: 'Licence Keys' },
+    // { id: 'domains', label: 'Domains' }, // Temporarily hidden
+    { id: 'licenses', label: 'Bulk Purchase' },
     { id: 'profile', label: 'Profile' },
   ];
 

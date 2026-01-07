@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { useMemberstack } from './hooks/useMemberstack';
-import { useDashboardData, useLicenses, queryKeys } from './hooks/useDashboardQueries';
+import { useDashboardData, useLicenses, useInvoices, queryKeys } from './hooks/useDashboardQueries';
 import { useNotification } from './hooks/useNotification';
 import { queryClient } from './lib/queryClient';
 import Sidebar from './components/Sidebar';
@@ -13,15 +14,32 @@ import Licenses from './components/Licenses';
 import Profile from './components/Profile';
 import PurchaseLicenseModal from './components/PurchaseLicenseModal';
 import AddDomainModal from './components/AddDomainModal';
+import ProtectedRoute from './components/ProtectedRoute';
 import LoginPrompt from './components/LoginPrompt';
 import Notification from './components/Notification';
 import consentLogo from './assets/consent-logo.svg';
 import exportIcon from './assets/export-icon.svg';
 import DashboardSkeleton from './components/DashboardSkeleton';
 import './App.css';
-import { useRef } from 'react';
 
-function DashboardContent() {
+// Login route component - uses existing LoginPrompt, redirects to dashboard if authenticated
+function LoginRoute() {
+  const { isAuthenticated, userEmail, loading: authLoading } = useMemberstack();
+
+  // Redirect to dashboard if already authenticated (only after loading completes)
+  if (!authLoading && isAuthenticated && userEmail) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  // Show login page using existing LoginPrompt component (even during loading)
+  return (
+    <div className="login-container">
+      <LoginPrompt />
+    </div>
+  );
+}
+
+function DashboardPage() {
   const { member, userEmail, isAuthenticated, loading: authLoading, error: authError } = useMemberstack();
   const { notification, showSuccess, showError, clear: clearNotification } = useNotification();
   const queryClient = useQueryClient();
@@ -33,8 +51,85 @@ const initialRender = useRef(true);
   const [addDomainModalOpen, setAddDomainModalOpen] = useState(false);
   const [isPollingLicenses, setIsPollingLicenses] = useState(false);
   const [isPollingDomains, setIsPollingDomains] = useState(false);
-
+  
   const queriesEnabled = isAuthenticated && !!userEmail;
+  
+  // Invoice state - using TanStack Query for caching
+  const [invoiceOffset, setInvoiceOffset] = useState(0);
+  const INVOICES_PER_PAGE = 10;
+  const invoicesQuery = useInvoices(userEmail, INVOICES_PER_PAGE, 0, {
+    enabled: queriesEnabled,
+  });
+  
+  // Aggregate invoices from cache (for pagination)
+  const invoices = invoicesQuery.data?.invoices || [];
+  const invoicesLoading = invoicesQuery.isLoading;
+  const invoicesError = invoicesQuery.error;
+  const hasMoreInvoices = invoicesQuery.data?.hasMore || false;
+  const totalInvoices = invoicesQuery.data?.total || 0;
+  
+  // Listen for purchase completion and refetch invoices
+  useEffect(() => {
+    if (!userEmail) return;
+
+    let lastPendingPurchase = sessionStorage.getItem('pendingLicensePurchase');
+    let lastPendingSitesPurchase = sessionStorage.getItem('pendingSitesPurchase');
+    let intervalId = null;
+
+    const checkForPurchaseCompletion = () => {
+      const currentPendingPurchase = sessionStorage.getItem('pendingLicensePurchase');
+      const currentPendingSitesPurchase = sessionStorage.getItem('pendingSitesPurchase');
+      
+      // If pending purchase was removed, purchase completed
+      if ((lastPendingPurchase && !currentPendingPurchase) || 
+          (lastPendingSitesPurchase && !currentPendingSitesPurchase)) {
+        // Wait a bit for Stripe webhook to create invoice, then refetch
+        setTimeout(async () => {
+          // Force refetch the first page of invoices to get new invoices
+          // Using refetchQueries to bypass staleTime: Infinity
+          await queryClient.refetchQueries({ 
+            queryKey: ['invoices', userEmail, 10, 0],
+            type: 'active'
+          });
+          
+          // Also invalidate all invoice queries for this user to clear cache
+          queryClient.invalidateQueries({ 
+            queryKey: ['invoices', userEmail]
+          });
+        }, 5000); // Wait 5 seconds for Stripe webhook to process
+        
+        // Stop polling once purchase completed
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+      }
+      
+      lastPendingPurchase = currentPendingPurchase;
+      lastPendingSitesPurchase = currentPendingSitesPurchase;
+    };
+
+    // Only poll if there's a pending purchase
+    if (lastPendingPurchase || lastPendingSitesPurchase) {
+      intervalId = setInterval(checkForPurchaseCompletion, 2000); // Check every 2 seconds
+    }
+
+    // Also check when component becomes visible (user returns from Stripe checkout)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkForPurchaseCompletion();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [userEmail, queryClient]);
 
   // Poll for new licenses after purchase (only updates licenses table)
   const startLicensePolling = (email, expectedQuantity) => {
@@ -283,16 +378,10 @@ useEffect(() => {
     showError(error.message || 'An error occurred');
   }
 
-  if (
-    maxTimeoutReached ||
-    (!isAuthenticated && !userEmail && !authLoading && !isFirstLoad)
-  ) {
-    return (
-      <div className="login-container">
-        {authError && <div className="error">{authError}</div>}
-        <LoginPrompt />
-      </div>
-    );
+  // This component should only render when authenticated (protected by route)
+  // But keep the check as a safety measure
+  if (!isAuthenticated || !userEmail) {
+    return null; // Will be redirected by ProtectedRoute
   }
 
   return (
@@ -329,9 +418,18 @@ useEffect(() => {
               <span>Purchase License Key</span>
             </button>}
 
-            <button
+            {/* Temporarily hidden - Add Domain button */}
+            {/* <button
               className="header-btn header-btn-primary"
-              onClick={() => setAddDomainModalOpen(true)}
+              onClick={() => {
+                if (isAuthenticated && userEmail) {
+                  setAddDomainModalOpen(true);
+                } else {
+                  showError('Please log in to add domains');
+                }
+              }}
+              disabled={!isAuthenticated || !userEmail}
+              title={!isAuthenticated || !userEmail ? 'Please log in to add domains' : 'Add new domain'}
             >
               <svg
                 width="16"
@@ -348,7 +446,7 @@ useEffect(() => {
                 />
               </svg>
               <span>Add New Domain</span>
-            </button>
+            </button> */}
           </div>
         </div>
       </div>
@@ -422,7 +520,8 @@ useEffect(() => {
                   />
                 )}
 
-                {activeSection === 'domains' && (
+                {/* Temporarily hidden - Domains section */}
+                {/* {activeSection === 'domains' && (
                   <Sites
                     sites={sites}
                     subscriptions={subscriptions}
@@ -430,13 +529,22 @@ useEffect(() => {
                     userEmail={userEmail || ''}
                     isPolling={isPollingDomains}
                   />
-                )}
+                )} */}
 
                 {activeSection === 'licenses' && (
                   <Licenses licenses={licenses} isPolling={isPollingLicenses} />
                 )}
 
-                {activeSection === 'profile' && <Profile userEmail={userEmail}  />}
+                {activeSection === 'profile' && (
+                  <Profile 
+                    userEmail={userEmail}
+                    invoices={invoices}
+                    invoicesLoading={invoicesLoading}
+                    invoicesError={invoicesError}
+                    hasMoreInvoices={hasMoreInvoices}
+                    totalInvoices={totalInvoices}
+                  />
+                )}
               </>
             )}
           </div>
@@ -464,7 +572,19 @@ useEffect(() => {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <DashboardContent />
+      <Routes>
+        <Route path="/" element={<LoginRoute />} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* Redirect any unknown routes to login page */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
       {import.meta.env.DEV && (
         <ReactQueryDevtools initialIsOpen={false} />
       )}
