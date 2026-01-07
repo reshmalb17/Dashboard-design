@@ -212,13 +212,51 @@ useEffect(() => {
       (site) => site.status === "active" || site.status === "pending",
     ).length;
 
-    const webflowCount = Object.values(sites).filter(
-      (site) => site.platform === "webflow" || site.source === "webflow",
+    // Create a combined map of sites from both sites object and licenses array
+    // Priority: sites object first, then licenses (to avoid double-counting)
+    const sitePlatformMap = new Map();
+    
+    // Add sites from sites object
+    Object.entries(sites).forEach(([siteDomain, siteData]) => {
+      if (siteData && (siteData.platform || siteData.source)) {
+        const platform = (siteData.platform || siteData.source || '').toLowerCase().trim();
+        if (platform && (platform === 'webflow' || platform === 'framer')) {
+          sitePlatformMap.set(siteDomain.toLowerCase().trim(), platform);
+        }
+      }
+    });
+    
+    // Add sites from licenses (only if not already in sites object)
+    licenses.forEach((lic) => {
+      const siteDomain = lic.used_site_domain || lic.site_domain;
+      if (siteDomain && lic.status === 'active') {
+        const normalizedDomain = siteDomain.toLowerCase().trim();
+        // Only add if not already in map (sites object takes priority)
+        if (!sitePlatformMap.has(normalizedDomain) && lic.platform) {
+          const platform = (lic.platform || '').toLowerCase().trim();
+          if (platform === 'webflow' || platform === 'framer') {
+            sitePlatformMap.set(normalizedDomain, platform);
+          }
+        }
+      }
+    });
+
+    // Count platforms from the combined map
+    const webflowCount = Array.from(sitePlatformMap.values()).filter(
+      (platform) => platform === "webflow"
     ).length;
 
-    const framerCount = Object.values(sites).filter(
-      (site) => site.platform === "framer" || site.source === "framer",
+    const framerCount = Array.from(sitePlatformMap.values()).filter(
+      (platform) => platform === "framer"
     ).length;
+
+    console.log('[Dashboard] Platform counts:', {
+      webflow: webflowCount,
+      framer: framerCount,
+      totalSitesInMap: sitePlatformMap.size,
+      sitesObjectCount: Object.keys(sites).length,
+      licensesCount: licenses.length
+    });
 
     const activatedLicenseKeys = activatedSites.length;
 
