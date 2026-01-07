@@ -284,8 +284,42 @@ const initialRender = useRef(true);
     const sessionId = urlParams.get('session_id');
     const canceled = urlParams.get('canceled');
 
+    // Check if we're in a popup window (opened from parent)
+    // If so, notify parent and close popup
+    if (window.opener && !window.opener.closed) {
+      if (sessionId) {
+        // Payment successful - notify parent window
+        window.opener.postMessage({
+          type: 'PAYMENT_SUCCESS',
+          sessionId: sessionId
+        }, window.location.origin);
+        
+        // Close popup after a short delay to ensure message is sent
+        setTimeout(() => {
+          window.close();
+        }, 500);
+        
+        // Clear URL params
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return; // Don't process further in popup
+      } else if (canceled) {
+        // Payment cancelled - notify parent
+        window.opener.postMessage({
+          type: 'PAYMENT_CANCELLED'
+        }, window.location.origin);
+        
+        setTimeout(() => {
+          window.close();
+        }, 500);
+        
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return;
+      }
+    }
+
     const pendingLicensePurchase = sessionStorage.getItem('pendingLicensePurchase');
     const pendingDomainPurchase = sessionStorage.getItem('pendingDomainPurchase');
+    const pendingSitesPurchase = sessionStorage.getItem('pendingSitesPurchase');
 
     if (sessionId && pendingLicensePurchase) {
       const purchaseInfo = JSON.parse(pendingLicensePurchase);
@@ -311,13 +345,103 @@ const initialRender = useRef(true);
       startDomainPolling(userEmail, purchaseInfo.domains, purchaseInfo.count);
 
       window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (sessionId && pendingSitesPurchase) {
+      const purchaseInfo = JSON.parse(pendingSitesPurchase);
+      sessionStorage.removeItem('pendingSitesPurchase');
+
+      showSuccess(
+        `Payment successful! Processing ${purchaseInfo.sites?.length || 0} site(s)...`
+      );
+
+      setIsPollingDomains(true);
+      startDomainPolling(userEmail, purchaseInfo.sites || [], purchaseInfo.sites?.length || 0);
+
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (sessionId) {
+      // Direct payment link purchase (no pendingLicensePurchase in sessionStorage)
+      // Still need to refetch licenses to show newly purchased ones
+      showSuccess('Payment successful! Processing your purchase...');
+
+      // Force refetch licenses to get newly purchased ones (bypass staleTime: Infinity)
+      queryClient.refetchQueries({
+        queryKey: queryKeys.licenses(userEmail),
+        type: 'active',
+      });
+
+      // Also refetch dashboard to refresh all data
+      queryClient.refetchQueries({
+        queryKey: queryKeys.dashboard(userEmail),
+        type: 'active',
+      });
+
+      // Start polling for licenses (without knowing exact quantity)
+      // Check for new licenses by comparing counts
+      const licensesData = queryClient.getQueryData(queryKeys.licenses(userEmail));
+      const currentCount = licensesData?.licenses?.length || 0;
+      sessionStorage.setItem('licenseCountBeforePurchase', currentCount.toString());
+
+      // Poll for new licenses
+      setIsPollingLicenses(true);
+      let pollCount = 0;
+      const maxPolls = 30;
+      const pollInterval = 10000;
+
+      const pollForLicenses = async () => {
+        pollCount++;
+
+        try {
+          // Force refetch licenses (bypass staleTime: Infinity)
+          await queryClient.refetchQueries({
+            queryKey: queryKeys.licenses(userEmail),
+            type: 'active',
+          });
+
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          const licensesData = queryClient.getQueryData(queryKeys.licenses(userEmail));
+          const currentLicenseCount = licensesData?.licenses?.length || 0;
+
+          const previousCount = parseInt(
+            sessionStorage.getItem('licenseCountBeforePurchase') || '0',
+            10
+          );
+
+          if (currentLicenseCount > previousCount) {
+            const newLicensesCount = currentLicenseCount - previousCount;
+            showSuccess(`Successfully added ${newLicensesCount} license key(s)!`);
+            sessionStorage.removeItem('licenseCountBeforePurchase');
+            setIsPollingLicenses(false);
+            return;
+          }
+
+          if (pollCount < maxPolls) {
+            setTimeout(pollForLicenses, pollInterval);
+          } else {
+            showSuccess(
+              'Your purchase is being processed. License keys will appear shortly.'
+            );
+            sessionStorage.removeItem('licenseCountBeforePurchase');
+            setIsPollingLicenses(false);
+          }
+        } catch (error) {
+          if (pollCount < maxPolls) {
+            setTimeout(pollForLicenses, pollInterval);
+          } else {
+            setIsPollingLicenses(false);
+          }
+        }
+      };
+
+      setTimeout(pollForLicenses, 5000);
+
+      window.history.replaceState({}, document.title, window.location.pathname);
     } else if (canceled === 'true') {
       sessionStorage.removeItem('pendingLicensePurchase');
       sessionStorage.removeItem('pendingDomainPurchase');
       showError('Payment was canceled');
       window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [userEmail, isAuthenticated, showSuccess, showError]);
+  }, [userEmail, isAuthenticated, showSuccess, showError, queryClient]);
 
   // Max timeout for auth
   useEffect(() => {
