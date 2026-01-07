@@ -32,126 +32,272 @@ export default function Licenses({ licenses }) {
   const queryClient = useQueryClient();
   const { userEmail } = useMemberstack();
 
-  // Check queue status and update progress
-  const checkStatus = useCallback(async () => {
-    if (stoppedRef.current || !userEmail) return;
+  // // Check queue status and update progress
+  // const checkStatus = useCallback(async () => {
+  //   if (stoppedRef.current || !userEmail) return;
 
-    try {
-      const data = await getLicensesStatus(userEmail);
+  //   try {
+  //     const data = await getLicensesStatus(userEmail);
 
-      const status = (data.status || '').toLowerCase().trim();
-      const progress = data.progress || {};
+  //     const status = (data.status || '').toLowerCase().trim();
+  //     const progress = data.progress || {};
 
-      if (status === 'pending' || status === 'processing') {
-        setIsQueuePolling(true);
-        setQueueProgress(progress);
+  //     if (status === 'pending' || status === 'processing') {
+  //       setIsQueuePolling(true);
+  //       setQueueProgress(progress);
         
-        // Force refetch license data periodically to show new licenses as they're created
-        // Use refetchQueries to bypass staleTime: Infinity
-        await queryClient.refetchQueries({
-          queryKey: queryKeys.dashboard(userEmail),
-          type: 'active',
-        });
-        await queryClient.refetchQueries({
-          queryKey: queryKeys.licenses(userEmail),
-          type: 'active',
-        });
-      } else if (status === 'completed') {
-        setIsQueuePolling(false);
-        setQueueProgress(null);
-        stoppedRef.current = true;
+  //       // Force refetch license data periodically to show new licenses as they're created
+  //       // Use refetchQueries to bypass staleTime: Infinity
+  //       await queryClient.refetchQueries({
+  //         queryKey: queryKeys.dashboard(userEmail),
+  //         type: 'active',
+  //       });
+  //       await queryClient.refetchQueries({
+  //         queryKey: queryKeys.licenses(userEmail),
+  //         type: 'active',
+  //       });
+  //     } else if (status === 'completed') {
+  //       setIsQueuePolling(false);
+  //       setQueueProgress(null);
+  //       stoppedRef.current = true;
         
-        if (intervalIdRef.current) {
-          clearInterval(intervalIdRef.current);
-          intervalIdRef.current = null;
-        }
+  //       if (intervalIdRef.current) {
+  //         clearInterval(intervalIdRef.current);
+  //         intervalIdRef.current = null;
+  //       }
         
-        sessionStorage.removeItem('pendingLicensePurchase');
+  //       sessionStorage.removeItem('pendingLicensePurchase');
         
-        // Final refresh to get all licenses - force refetch
-        await queryClient.refetchQueries({
-          queryKey: queryKeys.dashboard(userEmail),
-          type: 'active',
-        });
-        await queryClient.refetchQueries({
-          queryKey: queryKeys.licenses(userEmail),
-          type: 'active',
-        });
+  //       // Final refresh to get all licenses - force refetch
+  //       await queryClient.refetchQueries({
+  //         queryKey: queryKeys.dashboard(userEmail),
+  //         type: 'active',
+  //       });
+  //       await queryClient.refetchQueries({
+  //         queryKey: queryKeys.licenses(userEmail),
+  //         type: 'active',
+  //       });
         
-        // Show success message - use completed count from queue, not total licenses
-        const completedCount = progress.completed || 0;
-        if (completedCount > 0) {
-          showSuccess(`Successfully created ${completedCount} license${completedCount > 1 ? 's' : ''}!`);
-        } else {
-          showSuccess('License creation completed!');
-        }
-      } else if (status === 'failed') {
-        setIsQueuePolling(false);
-        setQueueProgress(null);
-        stoppedRef.current = true;
+  //       // Show success message - use completed count from queue, not total licenses
+  //       const completedCount = progress.completed || 0;
+  //       if (completedCount > 0) {
+  //         showSuccess(`Successfully created ${completedCount} license${completedCount > 1 ? 's' : ''}!`);
+  //       } else {
+  //         showSuccess('License creation completed!');
+  //       }
+  //     } else if (status === 'failed') {
+  //       setIsQueuePolling(false);
+  //       setQueueProgress(null);
+  //       stoppedRef.current = true;
         
-        if (intervalIdRef.current) {
-          clearInterval(intervalIdRef.current);
-          intervalIdRef.current = null;
-        }
+  //       if (intervalIdRef.current) {
+  //         clearInterval(intervalIdRef.current);
+  //         intervalIdRef.current = null;
+  //       }
         
-        sessionStorage.removeItem('pendingLicensePurchase');
+  //       sessionStorage.removeItem('pendingLicensePurchase');
         
-        showError(
-          data.message ||
-            'License creation failed. Please contact support or try again.'
-        );
-      }
-    } catch (err) {
-      // Don't stop polling on error, continue polling
-    }
-  }, [userEmail, queryClient, showSuccess, showError]);
+  //       showError(
+  //         data.message ||
+  //           'License creation failed. Please contact support or try again.'
+  //       );
+  //     }
+  //   } catch (err) {
+  //     // Don't stop polling on error, continue polling
+  //   }
+  // }, [userEmail, queryClient, showSuccess, showError]);
 
-  // Start polling when component mounts if there's a pending purchase
-  useEffect(() => {
-    if (!userEmail) return;
+  // // Start polling when component mounts if there's a pending purchase
+  // useEffect(() => {
+  //   if (!userEmail) return;
 
-    // Check if there's a pending purchase in sessionStorage
-    const pendingPurchase = sessionStorage.getItem('pendingLicensePurchase');
-    if (pendingPurchase) {
-      try {
-        const purchaseData = JSON.parse(pendingPurchase);
-        const purchaseTime = purchaseData.timestamp || 0;
-        const timeSincePurchase = Date.now() - purchaseTime;
+  //   // Check if there's a pending purchase in sessionStorage
+  //   const pendingPurchase = sessionStorage.getItem('pendingLicensePurchase');
+  //   if (pendingPurchase) {
+  //     try {
+  //       const purchaseData = JSON.parse(pendingPurchase);
+  //       const purchaseTime = purchaseData.timestamp || 0;
+  //       const timeSincePurchase = Date.now() - purchaseTime;
         
-        // Only start polling if purchase was recent (within last 30 minutes)
-        // Queue processing should complete within a few minutes
-        if (timeSincePurchase < 30 * 60 * 1000) {
-          stoppedRef.current = false;
-          setIsQueuePolling(true);
+  //       // Only start polling if purchase was recent (within last 30 minutes)
+  //       // Queue processing should complete within a few minutes
+  //       if (timeSincePurchase < 30 * 60 * 1000) {
+  //         stoppedRef.current = false;
+  //         setIsQueuePolling(true);
           
-          // Check immediately
-          checkStatus();
+  //         // Check immediately
+  //         checkStatus();
           
-          // Then poll every 3 seconds
-          intervalIdRef.current = setInterval(() => {
-            checkStatus();
-          }, 3000);
-        } else {
-          // Purchase is too old, remove from sessionStorage
-          sessionStorage.removeItem('pendingLicensePurchase');
-        }
-      } catch (err) {
-        console.error('[Licenses] Error parsing pending purchase:', err);
-        sessionStorage.removeItem('pendingLicensePurchase');
-      }
-    }
+  //         // Then poll every 3 seconds
+  //         intervalIdRef.current = setInterval(() => {
+  //           checkStatus();
+  //         }, 3000);
+  //       } else {
+  //         // Purchase is too old, remove from sessionStorage
+  //         sessionStorage.removeItem('pendingLicensePurchase');
+  //       }
+  //     } catch (err) {
+  //       console.error('[Licenses] Error parsing pending purchase:', err);
+  //       sessionStorage.removeItem('pendingLicensePurchase');
+  //     }
+  //   }
 
-    // Cleanup on unmount
-    return () => {
+  //   // Cleanup on unmount
+  //   return () => {
+  //     if (intervalIdRef.current) {
+  //       clearInterval(intervalIdRef.current);
+  //       intervalIdRef.current = null;
+  //     }
+  //   };
+  // }, [userEmail, checkStatus]);
+
+// ... existing code ...
+
+// Check queue status and update progress
+const checkStatus = useCallback(async () => {
+  if (stoppedRef.current || !userEmail) return;
+
+  try {
+    const data = await getLicensesStatus(userEmail);
+    console.log('[Licenses] Queue status response:', data); // Debug log
+
+    const status = (data.status || '').toLowerCase().trim();
+    const progress = data.progress || {};
+
+    if (status === 'pending' || status === 'processing') {
+      setIsQueuePolling(true);
+      setQueueProgress(progress);
+      
+      // Force refetch license data periodically to show new licenses as they're created
+      // Use refetchQueries with force: true to bypass staleTime: Infinity
+      const dashboardResult = await queryClient.refetchQueries({
+        queryKey: queryKeys.dashboard(userEmail),
+        type: 'active',
+      });
+      
+      const licensesResult = await queryClient.refetchQueries({
+        queryKey: queryKeys.licenses(userEmail),
+        type: 'active',
+      });
+      
+      // Update cache directly with new data if refetch succeeded
+      if (licensesResult && licensesResult.length > 0 && licensesResult[0].data) {
+        queryClient.setQueryData(queryKeys.licenses(userEmail), licensesResult[0].data);
+      }
+      
+      if (dashboardResult && dashboardResult.length > 0 && dashboardResult[0].data) {
+        queryClient.setQueryData(queryKeys.dashboard(userEmail), dashboardResult[0].data);
+      }
+    } else if (status === 'completed') {
+      setIsQueuePolling(false);
+      setQueueProgress(null);
+      stoppedRef.current = true;
+      
       if (intervalIdRef.current) {
         clearInterval(intervalIdRef.current);
         intervalIdRef.current = null;
       }
-    };
-  }, [userEmail, checkStatus]);
+      
+      sessionStorage.removeItem('pendingLicensePurchase');
+      
+      // Final refresh to get all licenses - force refetch and update cache
+      const dashboardResult = await queryClient.refetchQueries({
+        queryKey: queryKeys.dashboard(userEmail),
+        type: 'active',
+      });
+      
+      const licensesResult = await queryClient.refetchQueries({
+        queryKey: queryKeys.licenses(userEmail),
+        type: 'active',
+      });
+      
+      // Update cache directly with new data
+      if (licensesResult && licensesResult.length > 0 && licensesResult[0].data) {
+        queryClient.setQueryData(queryKeys.licenses(userEmail), licensesResult[0].data);
+      }
+      
+      if (dashboardResult && dashboardResult.length > 0 && dashboardResult[0].data) {
+        queryClient.setQueryData(queryKeys.dashboard(userEmail), dashboardResult[0].data);
+      }
+      
+      // Show success message - use completed count from queue, not total licenses
+      const completedCount = progress.completed || 0;
+      if (completedCount > 0) {
+        showSuccess(`Successfully created ${completedCount} license${completedCount > 1 ? 's' : ''}!`);
+      } else {
+        showSuccess('License creation completed!');
+      }
+    } else if (status === 'failed') {
+      setIsQueuePolling(false);
+      setQueueProgress(null);
+      stoppedRef.current = true;
+      
+      if (intervalIdRef.current) {
+        clearInterval(intervalIdRef.current);
+        intervalIdRef.current = null;
+      }
+      
+      sessionStorage.removeItem('pendingLicensePurchase');
+      
+      showError(
+        data.message ||
+          'License creation failed. Please contact support or try again.'
+      );
+    } else {
+      // Unknown status - log it but don't stop polling
+      console.log('[Licenses] Unknown queue status:', status, data);
+    }
+  } catch (err) {
+    // Log error but don't stop polling
+    console.error('[Licenses] Error checking queue status:', err);
+  }
+}, [userEmail, queryClient, showSuccess, showError]);
 
+// Start polling when component mounts if there's a pending purchase
+useEffect(() => {
+  if (!userEmail) return;
 
+  // Check if there's a pending purchase in sessionStorage
+  const pendingPurchase = sessionStorage.getItem('pendingLicensePurchase');
+  if (pendingPurchase) {
+    try {
+      const purchaseData = JSON.parse(pendingPurchase);
+      const purchaseTime = purchaseData.timestamp || 0;
+      const timeSincePurchase = Date.now() - purchaseTime;
+      
+      // Only start polling if purchase was recent (within last 30 minutes)
+      // Queue processing should complete within a few minutes
+      if (timeSincePurchase < 30 * 60 * 1000) {
+        stoppedRef.current = false;
+        setIsQueuePolling(true);
+        
+        // Check immediately
+        checkStatus();
+        
+        // Then poll every 3 seconds
+        intervalIdRef.current = setInterval(() => {
+          checkStatus();
+        }, 3000);
+      } else {
+        // Purchase is too old, remove from sessionStorage
+        sessionStorage.removeItem('pendingLicensePurchase');
+      }
+    } catch (err) {
+      console.error('[Licenses] Error parsing pending purchase:', err);
+      sessionStorage.removeItem('pendingLicensePurchase');
+    }
+  }
+
+  // Cleanup on unmount
+  return () => {
+    if (intervalIdRef.current) {
+      clearInterval(intervalIdRef.current);
+      intervalIdRef.current = null;
+    }
+  };
+}, [userEmail, checkStatus]);
+
+// ... existing code ...
   // Prepare licenses
   const displayLicenses =
     licenses && licenses.length > 0
