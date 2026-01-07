@@ -1,27 +1,44 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { useMemberstack } from './hooks/useMemberstack';
-import { useDashboardData, useLicenses, queryKeys } from './hooks/useDashboardQueries';
+import { useDashboardData, useLicenses, useInvoices, queryKeys } from './hooks/useDashboardQueries';
 import { useNotification } from './hooks/useNotification';
 import { queryClient } from './lib/queryClient';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
-import Subscriptions from './components/Subscriptions';
 import Sites from './components/Sites';
 import Licenses from './components/Licenses';
 import Profile from './components/Profile';
 import PurchaseLicenseModal from './components/PurchaseLicenseModal';
 import AddDomainModal from './components/AddDomainModal';
+import ProtectedRoute from './components/ProtectedRoute';
 import LoginPrompt from './components/LoginPrompt';
 import Notification from './components/Notification';
 import consentLogo from './assets/consent-logo.svg';
 import exportIcon from './assets/export-icon.svg';
 import DashboardSkeleton from './components/DashboardSkeleton';
 import './App.css';
-import { useRef } from 'react';
 
-function DashboardContent() {
+// Login route component - uses existing LoginPrompt, redirects to dashboard if authenticated
+function LoginRoute() {
+  const { isAuthenticated, userEmail, loading: authLoading } = useMemberstack();
+
+  // Redirect to dashboard if already authenticated (only after loading completes)
+  if (!authLoading && isAuthenticated && userEmail) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  // Show login page using existing LoginPrompt component (even during loading)
+  return (
+    <div className="login-container">
+      <LoginPrompt />
+    </div>
+  );
+}
+
+function DashboardPage() {
   const { member, userEmail, isAuthenticated, loading: authLoading, error: authError } = useMemberstack();
   const { notification, showSuccess, showError, clear: clearNotification } = useNotification();
   const queryClient = useQueryClient();
@@ -33,8 +50,85 @@ const initialRender = useRef(true);
   const [addDomainModalOpen, setAddDomainModalOpen] = useState(false);
   const [isPollingLicenses, setIsPollingLicenses] = useState(false);
   const [isPollingDomains, setIsPollingDomains] = useState(false);
-
+  
   const queriesEnabled = isAuthenticated && !!userEmail;
+  
+  // Invoice state - using TanStack Query for caching
+  const [invoiceOffset, setInvoiceOffset] = useState(0);
+  const INVOICES_PER_PAGE = 10;
+  const invoicesQuery = useInvoices(userEmail, INVOICES_PER_PAGE, 0, {
+    enabled: queriesEnabled,
+  });
+  
+  // Aggregate invoices from cache (for pagination)
+  const invoices = invoicesQuery.data?.invoices || [];
+  const invoicesLoading = invoicesQuery.isLoading;
+  const invoicesError = invoicesQuery.error;
+  const hasMoreInvoices = invoicesQuery.data?.hasMore || false;
+  const totalInvoices = invoicesQuery.data?.total || 0;
+  
+  // Listen for purchase completion and refetch invoices
+  useEffect(() => {
+    if (!userEmail) return;
+
+    let lastPendingPurchase = sessionStorage.getItem('pendingLicensePurchase');
+    let lastPendingSitesPurchase = sessionStorage.getItem('pendingSitesPurchase');
+    let intervalId = null;
+
+    const checkForPurchaseCompletion = () => {
+      const currentPendingPurchase = sessionStorage.getItem('pendingLicensePurchase');
+      const currentPendingSitesPurchase = sessionStorage.getItem('pendingSitesPurchase');
+      
+      // If pending purchase was removed, purchase completed
+      if ((lastPendingPurchase && !currentPendingPurchase) || 
+          (lastPendingSitesPurchase && !currentPendingSitesPurchase)) {
+        // Wait a bit for Stripe webhook to create invoice, then refetch
+        setTimeout(async () => {
+          // Force refetch the first page of invoices to get new invoices
+          // Using refetchQueries to bypass staleTime: Infinity
+          await queryClient.refetchQueries({ 
+            queryKey: ['invoices', userEmail, 10, 0],
+            type: 'active'
+          });
+          
+          // Also invalidate all invoice queries for this user to clear cache
+          queryClient.invalidateQueries({ 
+            queryKey: ['invoices', userEmail]
+          });
+        }, 5000); // Wait 5 seconds for Stripe webhook to process
+        
+        // Stop polling once purchase completed
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+      }
+      
+      lastPendingPurchase = currentPendingPurchase;
+      lastPendingSitesPurchase = currentPendingSitesPurchase;
+    };
+
+    // Only poll if there's a pending purchase
+    if (lastPendingPurchase || lastPendingSitesPurchase) {
+      intervalId = setInterval(checkForPurchaseCompletion, 2000); // Check every 2 seconds
+    }
+
+    // Also check when component becomes visible (user returns from Stripe checkout)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkForPurchaseCompletion();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [userEmail, queryClient]);
 
   // Poll for new licenses after purchase (only updates licenses table)
   const startLicensePolling = (email, expectedQuantity) => {
@@ -189,8 +283,42 @@ const initialRender = useRef(true);
     const sessionId = urlParams.get('session_id');
     const canceled = urlParams.get('canceled');
 
+    // Check if we're in a popup window (opened from parent)
+    // If so, notify parent and close popup
+    if (window.opener && !window.opener.closed) {
+      if (sessionId) {
+        // Payment successful - notify parent window
+        window.opener.postMessage({
+          type: 'PAYMENT_SUCCESS',
+          sessionId: sessionId
+        }, window.location.origin);
+        
+        // Close popup after a short delay to ensure message is sent
+        setTimeout(() => {
+          window.close();
+        }, 500);
+        
+        // Clear URL params
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return; // Don't process further in popup
+      } else if (canceled) {
+        // Payment cancelled - notify parent
+        window.opener.postMessage({
+          type: 'PAYMENT_CANCELLED'
+        }, window.location.origin);
+        
+        setTimeout(() => {
+          window.close();
+        }, 500);
+        
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return;
+      }
+    }
+
     const pendingLicensePurchase = sessionStorage.getItem('pendingLicensePurchase');
     const pendingDomainPurchase = sessionStorage.getItem('pendingDomainPurchase');
+    const pendingSitesPurchase = sessionStorage.getItem('pendingSitesPurchase');
 
     if (sessionId && pendingLicensePurchase) {
       const purchaseInfo = JSON.parse(pendingLicensePurchase);
@@ -216,13 +344,103 @@ const initialRender = useRef(true);
       startDomainPolling(userEmail, purchaseInfo.domains, purchaseInfo.count);
 
       window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (sessionId && pendingSitesPurchase) {
+      const purchaseInfo = JSON.parse(pendingSitesPurchase);
+      sessionStorage.removeItem('pendingSitesPurchase');
+
+      showSuccess(
+        `Payment successful! Processing ${purchaseInfo.sites?.length || 0} site(s)...`
+      );
+
+      setIsPollingDomains(true);
+      startDomainPolling(userEmail, purchaseInfo.sites || [], purchaseInfo.sites?.length || 0);
+
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (sessionId) {
+      // Direct payment link purchase (no pendingLicensePurchase in sessionStorage)
+      // Still need to refetch licenses to show newly purchased ones
+      showSuccess('Payment successful! Processing your purchase...');
+
+      // Force refetch licenses to get newly purchased ones (bypass staleTime: Infinity)
+      queryClient.refetchQueries({
+        queryKey: queryKeys.licenses(userEmail),
+        type: 'active',
+      });
+
+      // Also refetch dashboard to refresh all data
+      queryClient.refetchQueries({
+        queryKey: queryKeys.dashboard(userEmail),
+        type: 'active',
+      });
+
+      // Start polling for licenses (without knowing exact quantity)
+      // Check for new licenses by comparing counts
+      const licensesData = queryClient.getQueryData(queryKeys.licenses(userEmail));
+      const currentCount = licensesData?.licenses?.length || 0;
+      sessionStorage.setItem('licenseCountBeforePurchase', currentCount.toString());
+
+      // Poll for new licenses
+      setIsPollingLicenses(true);
+      let pollCount = 0;
+      const maxPolls = 30;
+      const pollInterval = 10000;
+
+      const pollForLicenses = async () => {
+        pollCount++;
+
+        try {
+          // Force refetch licenses (bypass staleTime: Infinity)
+          await queryClient.refetchQueries({
+            queryKey: queryKeys.licenses(userEmail),
+            type: 'active',
+          });
+
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          const licensesData = queryClient.getQueryData(queryKeys.licenses(userEmail));
+          const currentLicenseCount = licensesData?.licenses?.length || 0;
+
+          const previousCount = parseInt(
+            sessionStorage.getItem('licenseCountBeforePurchase') || '0',
+            10
+          );
+
+          if (currentLicenseCount > previousCount) {
+            const newLicensesCount = currentLicenseCount - previousCount;
+            showSuccess(`Successfully added ${newLicensesCount} license key(s)!`);
+            sessionStorage.removeItem('licenseCountBeforePurchase');
+            setIsPollingLicenses(false);
+            return;
+          }
+
+          if (pollCount < maxPolls) {
+            setTimeout(pollForLicenses, pollInterval);
+          } else {
+            showSuccess(
+              'Your purchase is being processed. License keys will appear shortly.'
+            );
+            sessionStorage.removeItem('licenseCountBeforePurchase');
+            setIsPollingLicenses(false);
+          }
+        } catch (error) {
+          if (pollCount < maxPolls) {
+            setTimeout(pollForLicenses, pollInterval);
+          } else {
+            setIsPollingLicenses(false);
+          }
+        }
+      };
+
+      setTimeout(pollForLicenses, 5000);
+
+      window.history.replaceState({}, document.title, window.location.pathname);
     } else if (canceled === 'true') {
       sessionStorage.removeItem('pendingLicensePurchase');
       sessionStorage.removeItem('pendingDomainPurchase');
       showError('Payment was canceled');
       window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [userEmail, isAuthenticated, showSuccess, showError]);
+  }, [userEmail, isAuthenticated, showSuccess, showError, queryClient]);
 
   // Max timeout for auth
   useEffect(() => {
@@ -283,16 +501,10 @@ useEffect(() => {
     showError(error.message || 'An error occurred');
   }
 
-  if (
-    maxTimeoutReached ||
-    (!isAuthenticated && !userEmail && !authLoading && !isFirstLoad)
-  ) {
-    return (
-      <div className="login-container">
-        {authError && <div className="error">{authError}</div>}
-        <LoginPrompt />
-      </div>
-    );
+  // This component should only render when authenticated (protected by route)
+  // But keep the check as a safety measure
+  if (!isAuthenticated || !userEmail) {
+    return null; // Will be redirected by ProtectedRoute
   }
 
   return (
@@ -304,9 +516,9 @@ useEffect(() => {
             <img src={consentLogo} alt="ConsentBit" className="header-logo-image" />
           </div>
           <div className="header-actions">
-            <button className="header-btn header-btn-icon" title="Export">
+            {/* <button className="header-btn header-btn-icon" title="Export">
               <img src={exportIcon} alt="Export" className="header-icon-image" />
-            </button>
+            </button> */}
 
            {activeSection === 'licenses' && <button
               className="header-btn header-btn-text"
@@ -329,9 +541,18 @@ useEffect(() => {
               <span>Purchase License Key</span>
             </button>}
 
+            {/* Temporarily hidden - Add Domain button */}
             {/* <button
               className="header-btn header-btn-primary"
-              onClick={() => setAddDomainModalOpen(true)}
+              onClick={() => {
+                if (isAuthenticated && userEmail) {
+                  setAddDomainModalOpen(true);
+                } else {
+                  showError('Please log in to add domains');
+                }
+              }}
+              disabled={!isAuthenticated || !userEmail}
+              title={!isAuthenticated || !userEmail ? 'Please log in to add domains' : 'Add new domain'}
             >
               <svg
                 width="16"
@@ -422,7 +643,8 @@ useEffect(() => {
                   />
                 )}
 
-                {activeSection === 'domains' && (
+                {/* Temporarily hidden - Domains section */}
+                {/* {activeSection === 'domains' && (
                   <Sites
                     sites={sites}
                     subscriptions={subscriptions}
@@ -430,13 +652,22 @@ useEffect(() => {
                     userEmail={userEmail || ''}
                     isPolling={isPollingDomains}
                   />
-                )}
+                )} */}
 
                 {activeSection === 'licenses' && (
                   <Licenses licenses={licenses} isPolling={isPollingLicenses} />
                 )}
 
-                {activeSection === 'profile' && <Profile userEmail={userEmail}  />}
+                {activeSection === 'profile' && (
+                  <Profile 
+                    userEmail={userEmail}
+                    invoices={invoices}
+                    invoicesLoading={invoicesLoading}
+                    invoicesError={invoicesError}
+                    hasMoreInvoices={hasMoreInvoices}
+                    totalInvoices={totalInvoices}
+                  />
+                )}
               </>
             )}
           </div>
@@ -465,7 +696,19 @@ useEffect(() => {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <DashboardContent />
+      <Routes>
+        <Route path="/" element={<LoginRoute />} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* Redirect any unknown routes to login page */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
       {import.meta.env.DEV && (
         <ReactQueryDevtools initialIsOpen={false} />
       )}

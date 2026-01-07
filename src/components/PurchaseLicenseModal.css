@@ -57,10 +57,11 @@ box-shadow: 0px 24px 33px 0px #262E8433;
   background: #f3f4f6;
 }
 .purchase-modal-right {
-  
   background-color: #F2F2FB;
   border-radius: 10px;
   padding: 36px 33px 31px 33px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 
@@ -103,7 +104,7 @@ box-shadow: 0px 24px 33px 0px #262E8433;
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid #45425E66;
-  margin-bottom: 38px;
+  margin-bottom: 20px;
 }
 
 .quantity-btn {
@@ -153,6 +154,15 @@ box-shadow: 0px 24px 33px 0px #262E8433;
   appearance: textfield;
 }
 
+.quantity-max-message {
+  margin: 12px 0 0 0;
+  font-size: 13px;
+  color: #262E84;
+  font-weight: 400;
+  text-align: center;
+  width: 100%;
+}
+
 /* Pay Now Button */
 .purchase-pay-btn {
   width: 100%;
@@ -165,7 +175,7 @@ box-shadow: 0px 24px 33px 0px #262E8433;
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.2s;
-  margin-top: 8px;
+  margin-top: 20px;
 }
 
 .purchase-pay-btn:hover {
@@ -178,9 +188,18 @@ box-shadow: 0px 24px 33px 0px #262E8433;
 
 /* Cost Section */
 .purchase-price {
-  font-size: 80px;
   font-weight: 200;
-  
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  line-height: 1;
+  box-sizing: border-box;
+  display: block;
+  /* Prevent text from causing container to grow */
+  min-width: 0;
+  /* Reduced font size - responsive but capped at 60px */
+  font-size: min(60px, 10vw);
 }
 
 /* Billing Options */

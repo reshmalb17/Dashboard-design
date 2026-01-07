@@ -75,7 +75,6 @@ export default function LoginPrompt() {
     
     // Prevent multiple submissions
     if (isLoading) {
-      console.log('[LoginPrompt] Code submission already in progress, ignoring...');
       return;
     }
     
@@ -96,9 +95,8 @@ export default function LoginPrompt() {
         // Step 2: Refresh session and verify Memberstack login status
         try {
           await refreshSession();
-          console.log('[LoginPrompt] Session refreshed after passwordless login');
         } catch (refreshError) {
-          console.warn('[LoginPrompt] Session refresh failed:', refreshError);
+          // Session refresh failed, continue anyway
         }
         
         // Step 3: Check Memberstack login status - verify user is actually logged in
@@ -117,25 +115,21 @@ export default function LoginPrompt() {
             member = await checkMemberstackSession();
             if (member) {
               userEmail = getUserEmail(member);
-              console.log(`[LoginPrompt] Attempt ${attempt + 1}: Member found, email:`, userEmail);
               if (userEmail) {
                 loginVerified = true;
                 break; // Success - exit retry loop
               }
             }
           } catch (memberError) {
-            console.warn(`[LoginPrompt] Attempt ${attempt + 1} failed:`, memberError);
+            // Attempt failed, continue to next attempt
           }
         }
         
         // Step 4: If Memberstack login verified, use the email from Memberstack
         // Otherwise fallback to form email
         if (!loginVerified || !userEmail) {
-          console.warn('[LoginPrompt] Memberstack login not verified, using form email as fallback');
           userEmail = email.toLowerCase().trim();
         }
-        
-        console.log('[LoginPrompt] Login verified, userEmail:', userEmail);
         
         // Step 5: If login is successful, use the email from Memberstack to fetch data from server
         // This ensures we display content from the server using the authenticated user's email
@@ -145,19 +139,11 @@ export default function LoginPrompt() {
           try {
             // Fetch both dashboard and licenses data in parallel immediately using the email from Memberstack
             // The email is used to query the backend API which returns user-specific data
-            console.log('[LoginPrompt] Fetching dashboard data from server using email:', userEmail);
-            
             const [dashboardData, licensesData] = await Promise.all([
               queryClient.prefetchQuery({
                 queryKey: queryKeys.dashboard(userEmail),
                 queryFn: async () => {
-                  console.log('[LoginPrompt] Fetching dashboard from API...');
                   const data = await getDashboard(userEmail);
-                  console.log('[LoginPrompt] ✅ Dashboard data received:', {
-                    hasSites: !!data.sites,
-                    sitesCount: data.sites ? Object.keys(data.sites).length : 0,
-                    hasSubscriptions: !!data.subscriptions
-                  });
                   return data;
                 },
                 staleTime: 300000, // 5 minutes
@@ -166,12 +152,7 @@ export default function LoginPrompt() {
               queryClient.prefetchQuery({
                 queryKey: queryKeys.licenses(userEmail),
                 queryFn: async () => {
-                  console.log('[LoginPrompt] Fetching licenses from API...');
                   const data = await getLicenses(userEmail);
-                  console.log('[LoginPrompt] ✅ Licenses data received:', {
-                    hasLicenses: !!data.licenses,
-                    licensesCount: data.licenses ? data.licenses.length : 0
-                  });
                   return data;
                 },
                 staleTime: 300000, // 5 minutes
@@ -184,7 +165,6 @@ export default function LoginPrompt() {
             const cachedLicenses = queryClient.getQueryData(queryKeys.licenses(userEmail));
             
             if (cachedDashboard && cachedLicenses) {
-              console.log('[LoginPrompt] ✅ All data loaded and cached, showing dashboard');
               setIsLoading(false);
               
               // Step 7: Dispatch login event to show dashboard (data is already loaded)
@@ -265,7 +245,7 @@ export default function LoginPrompt() {
               </div>
               
               <p className="login-instruction">
-                *Please use the exact mail as the webflow native app/framer native app
+                *Please use the same email you used for your Stripe purchase to access the dashboard.
               </p>
               
               {error && <div className="login-error">{error}</div>}

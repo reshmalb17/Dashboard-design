@@ -15,13 +15,22 @@
 }
 .domain-input-wrapper{
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 4px;
   max-width: 750px;
   width: 100%;
   border: 1px solid #45425E66;
-    border-radius: 10px;
-    padding-right: 9px;
+  border-radius: 10px;
+  padding-right: 9px;
+}
+
+.domain-input-wrapper.has-error {
+  border-color: #ef4444;
+}
+
+.domain-input-wrapper > input {
+  border: none;
+  padding: 13px 14px;
 }
 .add-domain-modal-body {
   flex: 1;
@@ -147,6 +156,7 @@
   font-size: 18px;
   color: #262E84;
   transition: border-color 0.2s;
+  background: transparent;
 }
 
 .domain-input:focus {
@@ -156,6 +166,22 @@
 
 .domain-input::placeholder {
   color: #9ca3af;
+}
+
+.domain-input.error {
+  border-color: #ef4444;
+}
+
+.domain-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.domain-error-message {
+  color: #ef4444;
+  font-size: 12px;
+  margin-top: 4px;
+  padding-left: 14px;
 }
 
 .domain-action-btn {
@@ -185,9 +211,6 @@
   border: none;
 }
 
-.domain-add-btn:hover {
-  
-}
 
 /* Cost Section */
 .add-domain-price {
@@ -258,6 +281,47 @@
 
 .add-domain-pay-btn:active {
   transform: translateY(1px);
+}
+
+.add-domain-pay-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: #9ca3af;
+}
+
+.add-domain-pay-btn:disabled:hover {
+  background: #9ca3af;
+}
+
+/* Polling Banner */
+.sites-polling-banner {
+  background: #EFF6FF;
+  border: 1px solid #3B82F6;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.sites-polling-text {
+  font-size: 14px;
+  color: #1e40af;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.sites-polling-progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #dbeafe;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.sites-polling-progress-fill {
+  height: 100%;
+  background: #3B82F6;
+  border-radius: 4px;
+  transition: width 0.3s ease;
 }
 
 /* Responsive */

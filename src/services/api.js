@@ -3,7 +3,7 @@
  * Handles all API communication with the backend
  */
 
-// Using existing server - same as consentbit-dashboard-1
+// Using production server directly
 const API_BASE = import.meta.env.VITE_API_BASE || 'https://consentbit-dashboard-test.web-8fb.workers.dev';
 
 
@@ -146,12 +146,6 @@ export async function getLicenses(userEmail) {
     const normalizedEmail = userEmail.toLowerCase().trim();
     
     const url = `${API_BASE}/licenses?email=${encodeURIComponent(normalizedEmail)}`;
-    console.log('[API] Fetching licenses:', {
-      url,
-      userEmail: normalizedEmail,
-      API_BASE,
-      originalEmail: userEmail
-    });
     
     // Try email-based endpoint first with timeout
     let response;
@@ -218,9 +212,6 @@ export async function getLicensesStatus(userEmail) {
     const normalizedEmail = userEmail.toLowerCase().trim();
     
     const url = `${API_BASE}/api/licenses/status?email=${encodeURIComponent(normalizedEmail)}`;
-    console.log('[API] Fetching licenses:', {  
-      userEmail: normalizedEmail,      
-    });
     
     // Try email-based endpoint first with timeout
     let response;
@@ -321,7 +312,6 @@ export async function activateLicense(licenseKey, siteDomain, email = null) {
       return data;
     }
 
-    console.log('License activated successfully:', data);
     return data;
 
   } catch (err) {
@@ -357,7 +347,6 @@ export async function cancelSubscription(email = null, site = null, subscription
       return data;
     }
 
-    console.log('Site removed successfully:', data);
     return data;
 
   } catch (error) {
@@ -411,6 +400,113 @@ export async function createSiteCheckout(email, sites, billingPeriod) {
   return data; // { checkout_url, session_id, ... }
 }
 
+// Add sites batch - creates checkout for batch site purchases (max 5 sites)
+export async function addSitesBatch(userEmail, sites, billingPeriod) {
+  try {
+    if (!userEmail || !userEmail.includes('@')) {
+      throw new Error('Invalid email address. Please log in again.');
+    }
+
+    const normalizedEmail = userEmail.toLowerCase().trim();
+    
+    // Validate sites array
+    if (!Array.isArray(sites) || sites.length === 0) {
+      throw new Error('At least one site is required');
+    }
+
+    if (sites.length > 5) {
+      throw new Error('Maximum 5 sites allowed per purchase');
+    }
+
+    const url = `${API_BASE}/add-sites-batch`;
+    const PURCHASE_TIMEOUT = 60000; // 60 seconds
+
+    const response = await Promise.race([
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          email: normalizedEmail,
+          sites: sites.map(s => typeof s === 'string' ? s : (s.site || s.site_domain || '')),
+          billing_period: billingPeriod.toLowerCase()
+        })
+      }),
+      createTimeoutPromise(PURCHASE_TIMEOUT)
+    ]);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { error: errorText || 'Unknown error' };
+      }
+      
+      throw new Error(
+        errorData.message || 
+        errorData.error || 
+        `Failed to create checkout session: ${response.status} ${response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+    
+    if (!data.checkout_url) {
+      throw new Error('Checkout session was created but no checkout URL was returned. Please try again.');
+    }
+
+    return data;
+  } catch (error) {
+    console.error('[API] addSitesBatch error:', error);
+    
+    if (error.message === 'Request timeout') {
+      throw new Error('Request timeout - The server is taking longer than expected. Please try again.');
+    }
+    
+    throw error;
+  }
+}
+
+// Get sites queue status for polling
+export async function getSitesStatus(userEmail, paymentIntentId = null) {
+  try {
+    if (!userEmail || !userEmail.includes('@')) {
+      throw new Error('Invalid email address');
+    }
+
+    const normalizedEmail = userEmail.toLowerCase().trim();
+    let url = `${API_BASE}/api/sites/status?email=${encodeURIComponent(normalizedEmail)}`;
+    
+    if (paymentIntentId) {
+      url += `&payment_intent_id=${encodeURIComponent(paymentIntentId)}`;
+    }
+
+    const response = await Promise.race([
+      fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'
+      }),
+      createTimeoutPromise(REQUEST_TIMEOUT_SHORT)
+    ]);
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch sites status: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('[API] getSitesStatus error:', error);
+    throw error;
+  }
+}
+
 
 // Remove pending site
 export async function removePendingSite(userEmail, site) {
@@ -436,15 +532,78 @@ export async function removePendingSite(userEmail, site) {
 // }
 
 // Purchase quantity of license keys
+// Uses longer timeout (60 seconds) since Stripe checkout creation can take time
 export async function purchaseQuantity(userEmail, quantity, billingPeriod) {
-  return apiRequest('/purchase-quantity', {
-    method: 'POST',
-    body: JSON.stringify({
-      email: userEmail,
-      quantity: parseInt(quantity),
-      billing_period: billingPeriod.toLowerCase() // 'monthly' or 'yearly'
-    }),
-  });
+  const url = `${API_BASE}/purchase-quantity`;
+  const PURCHASE_TIMEOUT = 60000; // 60 seconds for checkout creation
+  
+  try {
+    // Validate email before making API call
+    if (!userEmail || !userEmail.includes('@')) {
+      console.error('[API] ❌ Invalid email for purchase:', userEmail);
+      throw new Error('Invalid email address. Please log in again.');
+    }
+    
+    const normalizedEmail = userEmail.toLowerCase().trim();
+    
+    // Use custom timeout for purchase endpoint
+    const response = await Promise.race([
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          email: normalizedEmail,
+          quantity: parseInt(quantity),
+          billing_period: billingPeriod.toLowerCase()
+        })
+      }),
+      createTimeoutPromise(PURCHASE_TIMEOUT)
+    ]);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { error: errorText || 'Unknown error' };
+      }
+      
+      console.error('[API] Purchase failed:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorData
+      });
+      
+      throw new Error(
+        errorData.message || 
+        errorData.error || 
+        `Failed to create checkout session: ${response.status} ${response.statusText}`
+      );
+    }
+    
+    const data = await response.json();
+    
+    // Ensure checkout_url exists
+    if (!data.checkout_url) {
+      console.error('[API] Missing checkout_url in response:', data);
+      throw new Error('Checkout session was created but no checkout URL was returned. Please try again.');
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('[API] purchaseQuantity error:', error);
+    
+    // Provide user-friendly error messages
+    if (error.message === 'Request timeout') {
+      throw new Error('Request timeout - The server is taking longer than expected. Please try again.');
+    }
+    
+    throw error;
+  }
 }
 
 // Get user profile data from database
@@ -462,11 +621,6 @@ export async function getUserProfile(userEmail) {
     const normalizedEmail = userEmail.toLowerCase().trim();
     
     const url = `${API_BASE}/profile?email=${encodeURIComponent(normalizedEmail)}`;
-    console.log('[API] Fetching user profile:', {
-      url,
-      userEmail: normalizedEmail,
-      API_BASE
-    });
     
     // Try profile endpoint first
     let response;
@@ -490,7 +644,6 @@ export async function getUserProfile(userEmail) {
 
     // If profile endpoint doesn't exist (404), try getting user data from dashboard endpoint
     if (!response.ok && response.status === 404) {
-      console.log('[API] Profile endpoint not found, trying dashboard endpoint for user data...');
       const dashboardData = await getDashboard(userEmail);
       // Extract user info from dashboard response if available
       if (dashboardData.user) {
@@ -516,12 +669,6 @@ export async function getUserProfile(userEmail) {
     }
 
     const data = await response.json();
-    console.log('[API] Profile data received:', {
-      hasName: !!data.name,
-      hasEmail: !!data.email,
-      hasPlan: !!data.plan,
-      fullResponse: data
-    });
     return data;
   } catch (error) {
     console.error('[API] Error loading profile:', error);
@@ -529,3 +676,48 @@ export async function getUserProfile(userEmail) {
   }
 }
 */
+
+// Get invoices for a user (paid invoices only, excludes $0 invoices)
+// Supports pagination with limit and offset
+export async function getInvoices(userEmail, limit = 10, offset = 0) {
+  try {
+    // Validate email before making API call
+    if (!userEmail || !userEmail.includes('@')) {
+      console.error('[API] ❌ Invalid email for invoices API call:', userEmail);
+      throw new Error('Invalid email address. Please log out and log in again.');
+    }
+    
+    // Normalize email (lowercase and trim)
+    const normalizedEmail = userEmail.toLowerCase().trim();
+    
+    const url = `${API_BASE}/api/invoices?email=${encodeURIComponent(normalizedEmail)}&limit=${limit}&offset=${offset}`;
+    
+    // Use longer timeout (30s) since invoices endpoint needs to fetch from Stripe for multiple customers
+    const response = await Promise.race([
+      fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'
+      }),
+      createTimeoutPromise(REQUEST_TIMEOUT)
+    ]);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[API] Invoices response not OK:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorText
+      });
+      throw new Error(`Failed to load invoices: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('[API] Error loading invoices:', error);
+    throw error;
+  }
+}
