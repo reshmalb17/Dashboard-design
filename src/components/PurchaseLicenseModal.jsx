@@ -25,78 +25,55 @@ export default function PurchaseLicenseModal({ isOpen, onClose }) {
   };
 
   const handleIncrease = () => {
-    setQuantity((prev) => (prev < 100 ? prev + 1 : 100));
+    setQuantity((prev) => (prev < 50 ? prev + 1 : 50));
   };
 
- const handleQuantityChange = (e) => {
-  const raw = e.target.value;
+  const handleQuantityChange = (e) => {
+    const value = parseInt(e.target.value, 10);
+    if (!isNaN(value) && value >= 1 && value <= 50) {
+      setQuantity(value);
+    }
+  };
 
-  if (raw === '') {
-    setQuantity('');
-    return;
-  }
-
-  const value = parseInt(raw, 10);
-  if (isNaN(value)) return;
-
-  if (value > 25) {
-    showError('Maximum 25 license keys per purchase');
-    setQuantity(25);
-  } else if (value < 1) {
-    setQuantity(1);
-  } else {
-    setQuantity(value);
-  }
-};
-
-const handlePayNow = async () => {
-    // Validate user is logged in
+  const handlePayNow = async () => {
     if (!userEmail) {
       showError('Please log in to purchase license keys');
       return;
     }
-    // Validate quantity
-    if (quantity < 1) {
-      showError('Please select at least 1 license key');
-      return;
-    }
-    // Validate quantity max (backend allows up to 25)
-    if (quantity > 25) {
-      showError('Maximum 25 license keys per purchase');
-      return;
-    }
+    
     setIsProcessing(true);
+    
     try {
-      // Convert billing cycle to lowercase for API
-      const billingPeriod = billingCycle.toLowerCase(); // 'monthly' or 'yearly'
-      // Call the purchase-quantity endpoint
-      const response = await purchaseQuantity(userEmail, quantity, billingPeriod);
-      // Check if checkout_url is returned
-      if (response && response.checkout_url) {
-        // Store purchase info in sessionStorage for when user returns
+      const response = await purchaseQuantity(userEmail, quantity, billingCycle.toLowerCase());
+      
+      if (response?.checkout_url) {
         sessionStorage.setItem('pendingLicensePurchase', JSON.stringify({
           quantity,
           billingPeriod: billingCycle.toLowerCase(),
           timestamp: Date.now()
         }));
-        // Redirect user to Stripe checkout
-        window.location.href = response.checkout_url;
+        
+        const checkoutWindow = window.open(response.checkout_url, '_blank');
+        
+        if (!checkoutWindow || checkoutWindow.closed) {
+          setTimeout(() => {
+            window.location.href = response.checkout_url;
+          }, 500);
+        } else {
+          onClose();
+        }
       } else {
         showError('Failed to create checkout session. Please try again.');
         setIsProcessing(false);
       }
     } catch (error) {
-      const errorMessage = error.message || error.error || 'Failed to process purchase. Please try again.';
+      const errorMessage = error.message?.includes('timeout') 
+        ? 'Request timeout. Please try again.'
+        : error.message || 'Failed to process purchase. Please try again.';
       showError(errorMessage);
       setIsProcessing(false);
     }
   };
-//   const handleQuantityBlur = () => {
-//   let value = parseInt(quantity, 10);
-//   if (isNaN(value) || value < 1) value = 1;
-//   if (value > 100) value = 100;
-//   setQuantity(value);
-// };
 
   if (!isOpen) return null;
 
@@ -166,9 +143,8 @@ const handlePayNow = async () => {
                 className="quantity-input"
                 value={quantity}
                 onChange={handleQuantityChange}
-                // onBlur={handleQuantityBlur}
                 min="1"
-                max="100"
+                max="50"
               />
 
               <button
@@ -215,6 +191,9 @@ const handlePayNow = async () => {
             >
               {isProcessing ? 'Processing...' : 'Pay Now'}
             </button>
+            <p className="quantity-max-message">
+              Maximum quantity per purchase is 50
+            </p>
           </div>
 
           <div className="purchase-modal-right">

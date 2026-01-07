@@ -32,6 +32,7 @@ export default function Dashboard({
 }) {
   const [searchExpanded, setSearchExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [billingPeriodFilter, setBillingPeriodFilter] = useState("");
   const searchInputRef = useRef(null);
   const [copiedKey, setCopiedKey] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
@@ -43,8 +44,15 @@ export default function Dashboard({
 
   // Calculate stats from real data
   const dashboardStats = useMemo(() => {
-    const totalDomains = Object.keys(sites).length;
- console.log('Sites data for stats calculation:', sites);
+    // Count activated sites from licenses
+    const activatedSites = licenses.filter(
+      (lic) =>
+        lic.status === "active" &&
+        (lic.used_site_domain || lic.site_domain),
+    );
+    
+    const totalDomains = activatedSites.length;
+    
     const activeSites = Object.values(sites).filter(
       (site) => site.status === "active" || site.status === "pending",
     ).length;
@@ -57,11 +65,7 @@ export default function Dashboard({
       (site) => site.platform === "framer" || site.source === "framer",
     ).length;
 
-    const activatedLicenseKeys = licenses.filter(
-      (lic) =>
-        lic.status === "active" &&
-        (lic.used_site_domain || lic.site_domain),
-    ).length;
+    const activatedLicenseKeys = activatedSites.length;
 
     const notAssignedLicenseKeys = licenses.filter(
       (lic) =>
@@ -125,12 +129,26 @@ export default function Dashboard({
             ? "License Key"
             : "Direct payment";
 
-        // Determine status
+        // Site name from sites object
+        const siteData = sites[siteDomain];
+        const siteName =
+          siteData?.name || siteData?.site_name || siteDomain;
+
+        // Determine status - check item, subscription, and site data
         let status = "Active";
-        if (item.status === "inactive" || item.status === "cancelled") {
+        
+        // First check item status
+        if (item.status === "inactive" || item.status === "cancelled" || item.status === "canceled") {
           status = "Cancelled";
-        } else if (
+        } else if (item.status === "expired") {
+          status = "Expired";
+        } else if (item.status === "cancelling" || item.status === "canceling") {
+          status = "Cancelling";
+        }
+        // Then check subscription status
+        else if (
           subscription.status === "cancelled" ||
+          subscription.status === "canceled" ||
           subscription.cancel_at_period_end
         ) {
           if (
@@ -142,8 +160,17 @@ export default function Dashboard({
           } else {
             status = "Cancelling";
           }
-        } else if (item.status === "expired") {
-          status = "Expired";
+        }
+        // Finally check site data status
+        if (siteData?.status) {
+          const siteStatus = (siteData.status || "").toLowerCase().trim();
+          if (siteStatus === "expired") {
+            status = "Expired";
+          } else if (siteStatus === "cancelled" || siteStatus === "canceled" || siteStatus === "inactive") {
+            status = "Cancelled";
+          } else if (siteStatus === "cancelling" || siteStatus === "canceling") {
+            status = "Cancelling";
+          }
         }
 
         // Billing period
@@ -192,11 +219,6 @@ export default function Dashboard({
           }
         }
 
-        // Site name from sites object
-        const siteData = sites[siteDomain];
-        const siteName =
-          siteData?.name || siteData?.site_name || siteDomain;
-
         allItems.push({
           id: subscriptionId
             ? `${subscriptionId}_${itemIndex}`
@@ -216,85 +238,123 @@ export default function Dashboard({
       });
     });
 
-    // Process activated licenses not already represented
+    // Process licenses (including cancelled, inactive, etc.)
     licenses.forEach((license) => {
-      if (license.status === "active" && license.used_site_domain) {
-        const activatedSite = license.used_site_domain;
-
-        const alreadyAdded = allItems.some(
-          (item) =>
-            item.domain.toLowerCase().trim() ===
-            activatedSite.toLowerCase().trim(),
-        );
-        if (alreadyAdded) return;
-
-        if (
-          activatedSite.startsWith("license_") ||
-          activatedSite.startsWith("quantity_") ||
-          activatedSite === "N/A" ||
-          activatedSite.startsWith("KEY-")
-        ) {
-          return;
-        }
-
-        let expirationDate = "N/A";
-        if (license.renewal_date) {
-          try {
-            const timestamp =
-              typeof license.renewal_date === "number"
-                ? license.renewal_date
-                : parseInt(license.renewal_date);
-            const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
-            expirationDate = new Date(dateInMs).toLocaleDateString();
-          } catch {
-            expirationDate = "N/A";
-          }
-        }
-
-        let created = "N/A";
-        if (license.created_at) {
-          try {
-            const timestamp =
-              typeof license.created_at === "number"
-                ? license.created_at
-                : parseInt(license.created_at);
-            const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
-            created = new Date(dateInMs).toLocaleDateString();
-          } catch {
-            created = "N/A";
-          }
-        }
-
-        let billingPeriod = "N/A";
-        if (license.billing_period) {
-          const period = license.billing_period.toLowerCase().trim();
-          if (period.endsWith("ly")) {
-            billingPeriod =
-              period.charAt(0).toUpperCase() + period.slice(1);
-          } else {
-            billingPeriod =
-              period.charAt(0).toUpperCase() + period.slice(1) + "ly";
-          }
-        }
-
-        const siteData = sites[activatedSite];
-        const siteName =
-          siteData?.name || siteData?.site_name || activatedSite;
-
-        allItems.push({
-          id: `license_${license.license_key || activatedSite}`,
-          domain: activatedSite,
-          siteName,
-          active: true,
-          source: "License Key",
-          status: "Active",
-          billingPeriod,
-          expirationDate,
-          licenseKey: license.license_key || "N/A",
-          created,
-          createdTimestamp: license.created_at || 0,
-        });
+      // Only process licenses that are assigned to a site
+      const activatedSite = license.used_site_domain || license.site_domain;
+      if (!activatedSite) {
+        return; // Skip unassigned licenses
       }
+
+      const alreadyAdded = allItems.some(
+        (item) =>
+          item.domain.toLowerCase().trim() ===
+          activatedSite.toLowerCase().trim(),
+      );
+      if (alreadyAdded) return;
+
+      if (
+        activatedSite.startsWith("license_") ||
+        activatedSite.startsWith("quantity_") ||
+        activatedSite === "N/A" ||
+        activatedSite.startsWith("KEY-")
+      ) {
+        return;
+      }
+
+      // Determine status from license
+      const backendStatus = (license.status || "").toLowerCase().trim();
+      let status = "Active";
+      if (
+        backendStatus === "cancelled" ||
+        backendStatus === "canceled" ||
+        backendStatus === "inactive"
+      ) {
+        status = "Cancelled";
+      } else if (backendStatus === "expired") {
+        status = "Expired";
+      } else if (backendStatus === "cancelling") {
+        status = "Cancelling";
+      }
+
+      // Also check site data for status
+      const siteData = sites[activatedSite];
+      if (siteData) {
+        const siteStatus = (siteData.status || "").toLowerCase().trim();
+        if (siteStatus === "cancelled" || siteStatus === "canceled" || siteStatus === "inactive") {
+          status = "Cancelled";
+        } else if (siteStatus === "expired") {
+          status = "Expired";
+        } else if (siteStatus === "cancelling") {
+          status = "Cancelling";
+        }
+      }
+
+      let expirationDate = "N/A";
+      if (license.renewal_date) {
+        try {
+          const timestamp =
+            typeof license.renewal_date === "number"
+              ? license.renewal_date
+              : parseInt(license.renewal_date);
+          const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+          expirationDate = new Date(dateInMs).toLocaleDateString();
+        } catch {
+          expirationDate = "N/A";
+        }
+      }
+
+      let created = "N/A";
+      if (license.created_at) {
+        try {
+          const timestamp =
+            typeof license.created_at === "number"
+              ? license.created_at
+              : parseInt(license.created_at);
+          const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
+          created = new Date(dateInMs).toLocaleDateString();
+        } catch {
+          created = "N/A";
+        }
+      }
+
+      let billingPeriod = "N/A";
+      if (license.billing_period) {
+        const period = license.billing_period.toLowerCase().trim();
+        if (period.endsWith("ly")) {
+          billingPeriod =
+            period.charAt(0).toUpperCase() + period.slice(1);
+        } else {
+          billingPeriod =
+            period.charAt(0).toUpperCase() + period.slice(1) + "ly";
+        }
+      }
+
+      const siteName =
+        siteData?.name || siteData?.site_name || activatedSite;
+
+      // Get subscriptionId from license first, then from site data
+      const subscriptionId = 
+        license.subscription_id || 
+        license.subscriptionId || 
+        siteData?.subscription_id || 
+        siteData?.subscriptionId || 
+        null;
+
+      allItems.push({
+        id: `license_${license.license_key || activatedSite}`,
+        domain: activatedSite,
+        siteName,
+        active: status === "Active" || status === "Cancelling",
+        source: "License Key",
+        status,
+        billingPeriod,
+        expirationDate,
+        licenseKey: license.license_key || "N/A",
+        created,
+        createdTimestamp: license.created_at || 0,
+        subscriptionId,
+      });
     });
 
     return allItems
@@ -306,16 +366,36 @@ export default function Dashboard({
       .slice(0, 20);
   }, [sites, subscriptions, licenses]);
 
-  // Filter domains based on search query
+  // Filter domains based on search query and billing period
   const filteredDomains = useMemo(() => {
-    if (!searchQuery.trim()) return recentDomains;
-    const query = searchQuery.toLowerCase();
-    return recentDomains.filter(
-      (domain) =>
-        domain.domain.toLowerCase().includes(query) ||
-        domain.licenseKey.toLowerCase().includes(query),
-    );
-  }, [recentDomains, searchQuery]);
+    let filtered = recentDomains;
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (domain) =>
+          domain.domain.toLowerCase().includes(query) ||
+          domain.licenseKey.toLowerCase().includes(query),
+      );
+    }
+
+    // Filter by billing period
+    if (billingPeriodFilter && billingPeriodFilter.trim() !== "") {
+      const filterValue = billingPeriodFilter.trim();
+      filtered = filtered.filter((domain) => {
+        const domainPeriod = (domain.billingPeriod || "").trim();
+        // Skip entries with "N/A" billing period
+        if (domainPeriod === "N/A" || domainPeriod === "") {
+          return false;
+        }
+        // Normalize and compare (case-insensitive)
+        return domainPeriod.toLowerCase() === filterValue.toLowerCase();
+      });
+    }
+
+    return filtered;
+  }, [recentDomains, searchQuery, billingPeriodFilter]);
 
   useEffect(() => {
     if (searchExpanded && searchInputRef.current) {
@@ -332,6 +412,7 @@ export default function Dashboard({
   const handleSearchBlur = () => {
     if (searchQuery === "") setSearchExpanded(false);
   };
+  
 
   const handleCopyLicenseKey = async (licenseKey) => {
     if (!licenseKey || licenseKey === "N/A") return;
@@ -357,12 +438,47 @@ export default function Dashboard({
       }
 
       setCopiedKey(licenseKey);
+      showSuccess("License key copied to clipboard!");
       setTimeout(() => setCopiedKey(null), 2000);
     } catch {
       showError("Failed to copy license key");
     }
   };
 
+
+  const handleMenuClick = (e, domain) => {
+    e.stopPropagation();
+    if (!domain.subscriptionId) {
+      return; // Don't open menu if no subscriptionId
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const MENU_WIDTH = 180;
+    const MENU_HEIGHT = 50;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    let top = rect.bottom + 6;
+    let left = rect.left - MENU_WIDTH + rect.width;
+
+    if (top + MENU_HEIGHT > viewportHeight) {
+      top = rect.top - MENU_HEIGHT - 6;
+    }
+    if (left + MENU_WIDTH > viewportWidth) {
+      left = viewportWidth - MENU_WIDTH - 8;
+    }
+    if (left < 8) {
+      left = 8;
+    }
+
+    setContextMenu({
+      id: domain.id,
+      top,
+      left,
+      subscriptionId: domain.subscriptionId,
+      domainName: domain.domain,
+      siteDomain: domain.domain,
+    });
+  };
   // Close context menu when clicking outside (currently unused in active JSX)
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -491,7 +607,7 @@ export default function Dashboard({
 
         <div className="stat-card not-assigned-card">
           <div className="stat-label">
-            <span>Not assigned </span>license keys
+            <span>Unassigned </span>license keys
           </div>
           <div
             className="stat-value not-assigned-value"
@@ -506,43 +622,54 @@ export default function Dashboard({
       <div className="recent-domains-section">
         <div className="recent-domains-header">
           <h3 className="recent-domains-title">Recent domains</h3>
-          <div
-            className={`search-container ${
-              searchExpanded ? "expanded" : ""
-            }`}
-          >
-            {searchExpanded ? (
-              <input
-                ref={searchInputRef}
-                type="text"
-                className="search-input"
-                placeholder="Search domains..."
-                value={searchQuery}
-                onChange={handleSearchChange}
-                onBlur={handleSearchBlur}
-              />
-            ) : (
-              <button
-                className="search-icon-btn"
-                onClick={handleSearchClick}
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <select
+              className="domains-filter-select"
+              value={billingPeriodFilter}
+              onChange={(e) => setBillingPeriodFilter(e.target.value)}
+            >
+              <option value="">Billing Period</option>
+              <option value="Monthly">Monthly</option>
+              <option value="Yearly">Yearly</option>
+            </select>
+            <div
+              className={`search-container ${
+                searchExpanded ? "expanded" : ""
+              }`}
+            >
+              {searchExpanded ? (
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  className="search-input"
+                  placeholder="Search domains..."
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  onBlur={handleSearchBlur}
+                />
+              ) : (
+                <button
+                  className="search-icon-btn"
+                  onClick={handleSearchClick}
                 >
-                  <path
-                    d="M9 17A8 8 0 1 0 9 1a8 8 0 0 0 0 16zM19 19l-4.35-4.35"
-                    stroke="#666"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </button>
-            )}
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M9 17A8 8 0 1 0 9 1a8 8 0 0 0 0 16zM19 19l-4.35-4.35"
+                      stroke="#666"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -556,7 +683,7 @@ export default function Dashboard({
                 <th>Expiration Date</th>
                 <th>License Key</th>
                 <th>Created</th>
-                {/* <th></th> */}
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -599,54 +726,119 @@ export default function Dashboard({
                   <td className="black">
                     <div className="license-key-cell">
                       <span>{domain.licenseKey}</span>
-                      {/* <button
-                        className="copy-icon-btn"
-                        onClick={() =>
-                          handleCopyLicenseKey(domain.licenseKey)
-                        }
-                        title="Copy license key"
-                      >
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 16 16"
-                          fill="none"
-                          xmlns="http://www.w3.org/2000/svg"
+                      {domain.licenseKey !== "N/A" && (
+                        <button
+                          className="copy-icon-btn"
+                          onClick={() =>
+                            handleCopyLicenseKey(domain.licenseKey)
+                          }
+                          title="Copy license key"
                         >
-                          <rect
-                            width="16"
-                            height="16"
-                            rx="3"
-                            fill="#DEE8F4"
-                          />
-                          <path
-                            d="M9.7333 8.46752V10.1825C9.7333 11.6117 9.16163 12.1834 7.73245 12.1834H6.01745C4.58827 12.1834 4.0166 11.6117 4.0166 10.1825V8.46752C4.0166 7.03834 4.58827 6.46667 6.01745 6.46667H7.73245C9.16163 6.46667 9.7333 7.03834 9.7333 8.46752Z"
-                            stroke="#292D32"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <path
-                            d="M12.1835 6.01751V7.73251C12.1835 9.16169 11.6118 9.73336 10.1826 9.73336H9.73348V8.46752C9.73348 7.03834 9.16181 6.46667 7.73264 6.46667H6.4668V6.01751C6.4668 4.58833 7.03847 4.01666 8.46764 4.01666H10.1826C11.6118 4.01666 12.1835 4.58833 12.1835 6.01751Z"
-                            stroke="#292D32"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </button> */}
+                          {copiedKey === domain.licenseKey ? (
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 16 16"
+                              fill="none"
+                              xmlns="http://www.w3.org/2000/svg"
+                            >
+                              <rect
+                                width="16"
+                                height="16"
+                                rx="3"
+                                fill="#10B981"
+                              />
+                              <path
+                                d="M4 8L6.5 10.5L12 5"
+                                stroke="white"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          ) : (
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 16 16"
+                              fill="none"
+                              xmlns="http://www.w3.org/2000/svg"
+                            >
+                              <rect
+                                width="16"
+                                height="16"
+                                rx="3"
+                                fill="#DEE8F4"
+                              />
+                              <path
+                                d="M9.7333 8.46752V10.1825C9.7333 11.6117 9.16163 12.1834 7.73245 12.1834H6.01745C4.58827 12.1834 4.0166 11.6117 4.0166 10.1825V8.46752C4.0166 7.03834 4.58827 6.46667 6.01745 6.46667H7.73245C9.16163 6.46667 9.7333 7.03834 9.7333 8.46752Z"
+                                stroke="#292D32"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                              <path
+                                d="M12.1835 6.01751V7.73251C12.1835 9.16169 11.6118 9.73336 10.1826 9.73336H9.73348V8.46752C9.73348 7.03834 9.16181 6.46667 7.73264 6.46667H6.4668V6.01751C6.4668 4.58833 7.03847 4.01666 8.46764 4.01666H10.1826C11.6118 4.01666 12.1835 4.58833 12.1835 6.01751Z"
+                                stroke="#292D32"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          )}
+                        </button>
+                      )}
                     </div>
                   </td>
                   <td className="black">{domain.created}</td>
-                  {/* <td>
-                    <button className="actions-btn" title="Actions">
-                      <svg width="17" height="3" viewBox="0 0 17 3">
-                        <circle cx="1.5" cy="1.5" r="1.5" />
-                        <circle cx="8.5" cy="1.5" r="1.5" />
-                        <circle cx="15.5" cy="1.5" r="1.5" />
-                      </svg>
-                    </button>
-                  </td> */}
+                  <td>
+                    <div style={{ position: "relative" }}>
+                      {domain.subscriptionId && domain.status !== "Cancelled" && domain.status !== "Expired" && (
+                        <>
+                          <button
+                            className="actions-btn"
+                            onClick={(e) => handleMenuClick(e, domain)}
+                            title="Actions"
+                          >
+                            <svg width="17" height="3" viewBox="0 0 17 3">
+                              <circle cx="1.5" cy="1.5" r="1.5" />
+                              <circle cx="8.5" cy="1.5" r="1.5" />
+                              <circle cx="15.5" cy="1.5" r="1.5" />
+                            </svg>
+                          </button>
+                          {contextMenu?.id === domain.id && (
+                            <div
+                              ref={contextMenuRef}
+                              className="license-context-menu"
+                              style={{
+                                position: "fixed",
+                                top: contextMenu.top,
+                                left: contextMenu.left,
+                              }}
+                            >
+                              <button
+                                className="context-menu-item context-menu-item-danger"
+                                onClick={() =>
+                                  handleCancelSubscription(
+                                    contextMenu.subscriptionId,
+                                    contextMenu.domainName,
+                                    contextMenu.siteDomain,
+                                  )
+                                }
+                                disabled={isCancelling || domain.status === "Cancelled" || domain.status === "Expired"}
+                              >
+                                <span>
+                                  {isCancelling
+                                    ? "Cancelling..."
+                                    : "Cancel Subscription"}
+                                </span>
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
