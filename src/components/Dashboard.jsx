@@ -996,8 +996,7 @@ useEffect(() => {
       </div>
 
       {/* Progress Banner - Show when license generation is in progress */}
-      // ... existing code around line 969 ...
-
+     
 {/* Progress Banner - Show when license generation is in progress */}
 {isQueuePolling && queueProgress && (
   <div className="licenses-progress-banner" style={{ marginBottom: '24px' }}>
