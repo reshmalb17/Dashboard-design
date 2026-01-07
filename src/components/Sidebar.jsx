@@ -42,3 +42,4 @@ export default function Sidebar({ activeSection, onSectionChange, userEmail, isO
   );
 }
 
+
