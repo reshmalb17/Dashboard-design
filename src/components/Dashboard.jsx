@@ -55,122 +55,152 @@ const licenseMap = new Map(
 );
 console.log(licenseMap);
   // Check queue status and update progress (for license generation)
-  const checkQueueStatus = useCallback(async () => {
-    if (queueStoppedRef.current || !userEmail) return;
+// ... existing code ...
 
-    try {
-      const data = await getLicensesStatus(userEmail);
 
-      const status = (data.status || '').toLowerCase().trim();
-      const progress = data.progress || {};
+const checkQueueStatus = useCallback(async () => {
+  if (queueStoppedRef.current || !userEmail) return;
 
-      if (status === 'pending' || status === 'processing') {
-        setIsQueuePolling(true);
-        setQueueProgress(progress);
-        
-        // Force refetch license data periodically to show new licenses as they're created
-        // Use refetchQueries to bypass staleTime: Infinity
-        await queryClient.refetchQueries({
-          queryKey: queryKeys.dashboard(userEmail),
-          type: 'active',
-        });
-        await queryClient.refetchQueries({
-          queryKey: queryKeys.licenses(userEmail),
-          type: 'active',
-        });
-      } else if (status === 'completed') {
-        setIsQueuePolling(false);
-        setQueueProgress(null);
-        queueStoppedRef.current = true;
-        
-        if (queueIntervalIdRef.current) {
-          clearInterval(queueIntervalIdRef.current);
-          queueIntervalIdRef.current = null;
-        }
-        
-        sessionStorage.removeItem('pendingLicensePurchase');
-        
-        // Final refresh to get all licenses - force refetch
-        await queryClient.refetchQueries({
-          queryKey: queryKeys.dashboard(userEmail),
-          type: 'active',
-        });
-        await queryClient.refetchQueries({
-          queryKey: queryKeys.licenses(userEmail),
-          type: 'active',
-        });
-        
-        // Show success message
-        const completedCount = progress.completed || 0;
-        if (completedCount > 0) {
-          showSuccess(`Successfully created ${completedCount} license${completedCount > 1 ? 's' : ''}!`);
-        } else {
-          showSuccess('License creation completed!');
-        }
-      } else if (status === 'failed') {
-        setIsQueuePolling(false);
-        setQueueProgress(null);
-        queueStoppedRef.current = true;
-        
-        if (queueIntervalIdRef.current) {
-          clearInterval(queueIntervalIdRef.current);
-          queueIntervalIdRef.current = null;
-        }
-        
-        sessionStorage.removeItem('pendingLicensePurchase');
-        
-        showError(
-          data.message ||
-            'License creation failed. Please contact support or try again.'
-        );
+  try {
+    const data = await getLicensesStatus(userEmail);
+    console.log('[Dashboard] Queue status response:', data); // Debug log
+
+    const status = (data.status || '').toLowerCase().trim();
+    const progress = data.progress || {};
+
+    if (status === 'pending' || status === 'processing') {
+      setIsQueuePolling(true);
+      setQueueProgress(progress);
+      
+      // Force refetch license data periodically to show new licenses as they're created
+      // Use refetchQueries with force: true to bypass staleTime: Infinity
+      const dashboardResult = await queryClient.refetchQueries({
+        queryKey: queryKeys.dashboard(userEmail),
+        type: 'active',
+      });
+      
+      const licensesResult = await queryClient.refetchQueries({
+        queryKey: queryKeys.licenses(userEmail),
+        type: 'active',
+      });
+      
+      // Update cache directly with new data if refetch succeeded
+      if (licensesResult && licensesResult.length > 0 && licensesResult[0].data) {
+        queryClient.setQueryData(queryKeys.licenses(userEmail), licensesResult[0].data);
       }
-    } catch (err) {
-      // Don't stop polling on error, just log it
-    }
-  }, [userEmail, queryClient, showSuccess, showError]);
-
-  // Start polling when component mounts if there's a pending purchase
-  useEffect(() => {
-    if (!userEmail) return;
-
-    // Check if there's a pending purchase in sessionStorage
-    const pendingPurchase = sessionStorage.getItem('pendingLicensePurchase');
-    if (pendingPurchase) {
-      try {
-        const purchaseData = JSON.parse(pendingPurchase);
-        const purchaseTime = purchaseData.timestamp || 0;
-        const timeSincePurchase = Date.now() - purchaseTime;
-        
-        // Only start polling if purchase was recent (within last 30 minutes)
-        if (timeSincePurchase < 30 * 60 * 1000) {
-          queueStoppedRef.current = false;
-          setIsQueuePolling(true);
-          
-          // Check immediately
-          checkQueueStatus();
-          
-          // Then poll every 3 seconds
-          queueIntervalIdRef.current = setInterval(() => {
-            checkQueueStatus();
-          }, 3000);
-        } else {
-          // Purchase is too old, remove from sessionStorage
-          sessionStorage.removeItem('pendingLicensePurchase');
-        }
-      } catch (err) {
-        sessionStorage.removeItem('pendingLicensePurchase');
+      
+      if (dashboardResult && dashboardResult.length > 0 && dashboardResult[0].data) {
+        queryClient.setQueryData(queryKeys.dashboard(userEmail), dashboardResult[0].data);
       }
-    }
-
-    // Cleanup on unmount
-    return () => {
+    } else if (status === 'completed') {
+      setIsQueuePolling(false);
+      setQueueProgress(null);
+      queueStoppedRef.current = true;
+      
       if (queueIntervalIdRef.current) {
         clearInterval(queueIntervalIdRef.current);
         queueIntervalIdRef.current = null;
       }
-    };
-  }, [userEmail, checkQueueStatus]);
+      
+      sessionStorage.removeItem('pendingLicensePurchase');
+      
+      // Final refresh to get all licenses - force refetch and update cache
+      const dashboardResult = await queryClient.refetchQueries({
+        queryKey: queryKeys.dashboard(userEmail),
+        type: 'active',
+      });
+      
+      const licensesResult = await queryClient.refetchQueries({
+        queryKey: queryKeys.licenses(userEmail),
+        type: 'active',
+      });
+      
+      // Update cache directly with new data
+      if (licensesResult && licensesResult.length > 0 && licensesResult[0].data) {
+        queryClient.setQueryData(queryKeys.licenses(userEmail), licensesResult[0].data);
+      }
+      
+      if (dashboardResult && dashboardResult.length > 0 && dashboardResult[0].data) {
+        queryClient.setQueryData(queryKeys.dashboard(userEmail), dashboardResult[0].data);
+      }
+      
+      // Show success message
+      const completedCount = progress.completed || 0;
+      if (completedCount > 0) {
+        showSuccess(`Successfully created ${completedCount} license${completedCount > 1 ? 's' : ''}!`);
+      } else {
+        showSuccess('License creation completed!');
+      }
+    } else if (status === 'failed') {
+      setIsQueuePolling(false);
+      setQueueProgress(null);
+      queueStoppedRef.current = true;
+      
+      if (queueIntervalIdRef.current) {
+        clearInterval(queueIntervalIdRef.current);
+        queueIntervalIdRef.current = null;
+      }
+      
+      sessionStorage.removeItem('pendingLicensePurchase');
+      
+      showError(
+        data.message ||
+          'License creation failed. Please contact support or try again.'
+      );
+    } else {
+      // Unknown status - log it but don't stop polling
+      console.log('[Dashboard] Unknown queue status:', status, data);
+    }
+  } catch (err) {
+    // Log error but don't stop polling
+    console.error('[Dashboard] Error checking queue status:', err);
+  }
+}, [userEmail, queryClient, showSuccess, showError]);
 
+// Start polling when component mounts if there's a pending purchase
+useEffect(() => {
+  if (!userEmail) return;
+
+  // Check if there's a pending purchase in sessionStorage
+  const pendingPurchase = sessionStorage.getItem('pendingLicensePurchase');
+  if (pendingPurchase) {
+    try {
+      const purchaseData = JSON.parse(pendingPurchase);
+      const purchaseTime = purchaseData.timestamp || 0;
+      const timeSincePurchase = Date.now() - purchaseTime;
+      
+      // Only start polling if purchase was recent (within last 30 minutes)
+      if (timeSincePurchase < 30 * 60 * 1000) {
+        queueStoppedRef.current = false;
+        setIsQueuePolling(true);
+        
+        // Check immediately
+        checkQueueStatus();
+        
+        // Then poll every 3 seconds
+        queueIntervalIdRef.current = setInterval(() => {
+          checkQueueStatus();
+        }, 3000);
+      } else {
+        // Purchase is too old, remove from sessionStorage
+        sessionStorage.removeItem('pendingLicensePurchase');
+      }
+    } catch (err) {
+      console.error('[Dashboard] Error parsing pending purchase:', err);
+      sessionStorage.removeItem('pendingLicensePurchase');
+    }
+  }
+
+  // Cleanup on unmount
+  return () => {
+    if (queueIntervalIdRef.current) {
+      clearInterval(queueIntervalIdRef.current);
+      queueIntervalIdRef.current = null;
+    }
+  };
+}, [userEmail, checkQueueStatus]);
+
+// ... existing code ...
   // Calculate stats from real data
   const dashboardStats = useMemo(() => {
     // Count activated sites from licenses
@@ -186,14 +216,52 @@ console.log(licenseMap);
       (site) => site.status === "active" || site.status === "pending",
     ).length;
 
-    const webflowCount = Object.values(activatedSites).filter(
-      (site) => site.platform === "webflow" || site.source === "webflow",
+    // Create a combined map of sites from both sites object and licenses array
+    // Priority: sites object first, then licenses (to avoid double-counting)
+    const sitePlatformMap = new Map();
+    
+    // Add sites from sites object
+    Object.entries(sites).forEach(([siteDomain, siteData]) => {
+      if (siteData && (siteData.platform || siteData.source)) {
+        const platform = (siteData.platform || siteData.source || '').toLowerCase().trim();
+        if (platform && (platform === 'webflow' || platform === 'framer')) {
+          sitePlatformMap.set(siteDomain.toLowerCase().trim(), platform);
+        }
+      }
+    });
+    
+    // Add sites from licenses (only if not already in sites object)
+    licenses.forEach((lic) => {
+      const siteDomain = lic.used_site_domain || lic.site_domain;
+      if (siteDomain && lic.status === 'active') {
+        const normalizedDomain = siteDomain.toLowerCase().trim();
+        // Only add if not already in map (sites object takes priority)
+        if (!sitePlatformMap.has(normalizedDomain) && lic.platform) {
+          const platform = (lic.platform || '').toLowerCase().trim();
+          if (platform === 'webflow' || platform === 'framer') {
+            sitePlatformMap.set(normalizedDomain, platform);
+          }
+        }
+      }
+    });
+
+    // Count platforms from the combined map
+    const webflowCount = Array.from(sitePlatformMap.values()).filter(
+      (platform) => platform === "webflow"
     ).length;
     
 
-    const framerCount = Object.values(activatedSites).filter(
-      (site) => site.platform === "framer" || site.source === "framer",
+    const framerCount = Array.from(sitePlatformMap.values()).filter(
+      (platform) => platform === "framer"
     ).length;
+
+    console.log('[Dashboard] Platform counts:', {
+      webflow: webflowCount,
+      framer: framerCount,
+      totalSitesInMap: sitePlatformMap.size,
+      sitesObjectCount: Object.keys(sites).length,
+      licensesCount: licenses.length
+    });
 
     const activatedLicenseKeys = activatedSites.length;
 
@@ -660,99 +728,255 @@ const updatedFilteredDomains = filteredDomains.map(domain => ({
     setCancelModal(null);
   };
 
+  // const handleCancelSubscription = async () => {
+  //   if (isCancelling) return;
+  //   if (!cancelModal) return;
+
+  //   const { subscriptionId, siteDomain, domainName } = cancelModal;
+
+  //   if (!userEmail) {
+  //     showError("User email not found. Please refresh the page.");
+  //     return;
+  //   }
+
+  //   if (!subscriptionId) {
+  //     showError("Subscription ID not found.");
+  //     return;
+  //   }
+
+  //   if (!siteDomain) {
+  //     showError("Site domain not found.");
+  //     return;
+  //   }
+
+  //   setIsCancelling(true);
+
+  //   try {
+  //     const response = await cancelSubscription(
+  //       userEmail,
+  //       siteDomain,
+  //       subscriptionId,
+  //     );
+  //     const message =
+  //       response.message ||
+  //       "Subscription cancelled successfully. The subscription will remain active until the end of the current billing period.";
+  //     showSuccess(message);
+
+  //     // Update dashboard cache
+  //     queryClient.setQueryData(
+  //       queryKeys.dashboard(userEmail),
+  //       (oldData) => {
+  //         if (!oldData) return oldData;
+
+  //         // Update sites
+  //         const updatedSites = { ...oldData.sites };
+  //         if (updatedSites[siteDomain]) {
+  //           updatedSites[siteDomain] = {
+  //             ...updatedSites[siteDomain],
+  //             status: 'cancelled',
+  //           };
+  //         }
+
+  //         // Update subscriptions
+  //         const subscriptionsArray = Array.isArray(oldData.subscriptions)
+  //           ? oldData.subscriptions
+  //           : Object.values(oldData.subscriptions || {});
+          
+  //         const updatedSubscriptions = subscriptionsArray.map((sub) => {
+  //           const subId = sub.subscription_id || sub.subscriptionId || sub.id;
+  //           if (subId === subscriptionId) {
+  //             return {
+  //               ...sub,
+  //               status: 'cancelled',
+  //             };
+  //           }
+  //           return sub;
+  //         });
+
+  //         // Convert back to original format if it was an object
+  //         const subscriptionsFormatted = Array.isArray(oldData.subscriptions)
+  //           ? updatedSubscriptions
+  //           : updatedSubscriptions.reduce((acc, sub) => {
+  //               const subId = sub.subscription_id || sub.subscriptionId || sub.id;
+  //               if (subId) {
+  //                 acc[subId] = sub;
+  //               }
+  //               return acc;
+  //             }, {});
+
+  //         return {
+  //           ...oldData,
+  //           sites: updatedSites,
+  //           subscriptions: subscriptionsFormatted,
+  //         };
+  //       }
+  //     );
+
+  //     // Invalidate queries to trigger UI updates
+  //     await queryClient.invalidateQueries({
+  //       queryKey: queryKeys.dashboard(userEmail),
+  //     });
+
+  //     handleCloseCancelModal();
+  //   } catch (error) {
+  //     const errorMessage = error.message || error.error || "Unknown error";
+  //     showError("Failed to cancel subscription: " + errorMessage);
+  //   } finally {
+  //     setIsCancelling(false);
+  //   }
+  // };
   const handleCancelSubscription = async () => {
     if (isCancelling) return;
     if (!cancelModal) return;
-
-    const { subscriptionId, siteDomain, domainName } = cancelModal;
-
+    
+    const { subscriptionId, siteDomain } = cancelModal;
+    
     if (!userEmail) {
-      showError("User email not found. Please refresh the page.");
+      showError('User email not found. Please refresh.');
       return;
     }
-
     if (!subscriptionId) {
-      showError("Subscription ID not found.");
+      showError('Subscription ID not found.');
       return;
     }
-
     if (!siteDomain) {
-      showError("Site domain not found.");
+      showError('Site domain not found.');
       return;
     }
 
     setIsCancelling(true);
 
     try {
-      const response = await cancelSubscription(
-        userEmail,
-        siteDomain,
-        subscriptionId,
-      );
-      const message =
-        response.message ||
-        "Subscription cancelled successfully. The subscription will remain active until the end of the current billing period.";
-      showSuccess(message);
+      const response = await cancelSubscription(userEmail, siteDomain, subscriptionId);
+      if (response.success) {
+        const successMessage = response.message || `Subscription for "${siteDomain}" has been cancelled successfully.`;
+        showSuccess(successMessage);
 
-      // Update dashboard cache
-      queryClient.setQueryData(
-        queryKeys.dashboard(userEmail),
-        (oldData) => {
-          if (!oldData) return oldData;
+        // Update licenses cache
+        queryClient.setQueryData(
+          queryKeys.licenses(userEmail),
+          (oldData) => {
+            if (!oldData) return oldData;
 
-          // Update sites
-          const updatedSites = { ...oldData.sites };
-          if (updatedSites[siteDomain]) {
-            updatedSites[siteDomain] = {
-              ...updatedSites[siteDomain],
-              status: 'cancelled',
+            const updatedLicenses = oldData.licenses?.map((lic) => {
+              // Match by subscription ID or site domain
+              const matchesSubscription = 
+                lic.subscription_id === subscriptionId ||
+                lic.subscriptionId === subscriptionId;
+              
+              const matchesDomain = 
+                (lic.used_site_domain || lic.site_domain || '').toLowerCase().trim() ===
+                siteDomain.toLowerCase().trim();
+
+              if (matchesSubscription || matchesDomain) {
+                return {
+                  ...lic,
+                  status: 'cancelled', // backend status
+                  subscription_id: lic.subscription_id || subscriptionId,
+                  subscriptionId: lic.subscriptionId || subscriptionId,
+                };
+              }
+
+              return lic;
+            });
+
+            return {
+              ...oldData,
+              licenses: updatedLicenses,
             };
           }
+        );
 
-          // Update subscriptions
-          const subscriptionsArray = Array.isArray(oldData.subscriptions)
-            ? oldData.subscriptions
-            : Object.values(oldData.subscriptions || {});
-          
-          const updatedSubscriptions = subscriptionsArray.map((sub) => {
-            const subId = sub.subscription_id || sub.subscriptionId || sub.id;
-            if (subId === subscriptionId) {
-              return {
-                ...sub,
+        // Update dashboard cache - licenses
+        queryClient.setQueryData(
+          queryKeys.dashboard(userEmail),
+          (oldData) => {
+            if (!oldData) return oldData;
+
+            // Update licenses in dashboard
+            const updatedLicenses = oldData.licenses?.map((lic) => {
+              const matchesSubscription = 
+                lic.subscription_id === subscriptionId ||
+                lic.subscriptionId === subscriptionId;
+              
+              const matchesDomain = 
+                (lic.used_site_domain || lic.site_domain || '').toLowerCase().trim() ===
+                siteDomain.toLowerCase().trim();
+
+              if (matchesSubscription || matchesDomain) {
+                return {
+                  ...lic,
+                  status: 'cancelled',
+                  subscription_id: lic.subscription_id || subscriptionId,
+                  subscriptionId: lic.subscriptionId || subscriptionId,
+                };
+              }
+
+              return lic;
+            });
+
+            // Update sites
+            const updatedSites = { ...oldData.sites };
+            if (updatedSites[siteDomain]) {
+              updatedSites[siteDomain] = {
+                ...updatedSites[siteDomain],
                 status: 'cancelled',
               };
             }
-            return sub;
-          });
 
-          // Convert back to original format if it was an object
-          const subscriptionsFormatted = Array.isArray(oldData.subscriptions)
-            ? updatedSubscriptions
-            : updatedSubscriptions.reduce((acc, sub) => {
-                const subId = sub.subscription_id || sub.subscriptionId || sub.id;
-                if (subId) {
-                  acc[subId] = sub;
-                }
-                return acc;
-              }, {});
+            // Update subscriptions
+            const subscriptionsArray = Array.isArray(oldData.subscriptions)
+              ? oldData.subscriptions
+              : Object.values(oldData.subscriptions || {});
+            
+            const updatedSubscriptions = subscriptionsArray.map((sub) => {
+              const subId = sub.subscription_id || sub.subscriptionId || sub.id;
+              if (subId === subscriptionId) {
+                return {
+                  ...sub,
+                  status: 'cancelled',
+                };
+              }
+              return sub;
+            });
 
-          return {
-            ...oldData,
-            sites: updatedSites,
-            subscriptions: subscriptionsFormatted,
-          };
-        }
-      );
+            // Convert back to original format if it was an object
+            const subscriptionsFormatted = Array.isArray(oldData.subscriptions)
+              ? updatedSubscriptions
+              : updatedSubscriptions.reduce((acc, sub) => {
+                  const subId = sub.subscription_id || sub.subscriptionId || sub.id;
+                  if (subId) {
+                    acc[subId] = sub;
+                  }
+                  return acc;
+                }, {});
 
-      // Invalidate queries to trigger UI updates
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.dashboard(userEmail),
-      });
+            return {
+              ...oldData,
+              licenses: updatedLicenses,
+              sites: updatedSites,
+              subscriptions: subscriptionsFormatted,
+            };
+          }
+        );
 
-      handleCloseCancelModal();
+        // Invalidate queries to trigger UI updates
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.licenses(userEmail),
+          refetchType: 'none',
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.dashboard(userEmail),
+          refetchType: 'none',
+        });
+
+        handleCloseCancelModal();
+      }
     } catch (error) {
-      const errorMessage = error.message || error.error || "Unknown error";
-      showError("Failed to cancel subscription: " + errorMessage);
+      showError(
+        'Failed to cancel subscription: ' +
+          (error.message || error.error || 'Unknown error'),
+      );
     } finally {
       setIsCancelling(false);
     }
@@ -825,38 +1049,42 @@ const updatedFilteredDomains = filteredDomains.map(domain => ({
       </div>
 
       {/* Progress Banner - Show when license generation is in progress */}
-      {isQueuePolling && queueProgress && (
-        <div className="licenses-progress-banner" style={{ marginBottom: '24px' }}>
-          <div className="licenses-progress-banner-content">
-            <div className="licenses-progress-banner-icon">
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="2" strokeDasharray="12.566" strokeDashoffset="6.283">
-                  <animate attributeName="stroke-dashoffset" values="12.566;0;12.566" dur="1.5s" repeatCount="indefinite" />
-                </circle>
-              </svg>
-            </div>
-            <div className="licenses-progress-banner-text">
-              <strong>Creating your licenses...</strong>
-              <span>
-                {queueProgress.completed || 0} of {queueProgress.total || '?'}
-                {queueProgress.processing > 0 && ` (${queueProgress.processing} processing)`}
-              </span>
-            </div>
-            <div className="licenses-progress-banner-bar-wrapper">
-              <div className="licenses-progress-banner-bar">
-                <div 
-                  className="licenses-progress-banner-bar-fill" 
-                  style={{ 
-                    width: queueProgress.total > 0 
-                      ? `${((queueProgress.completed || 0) / queueProgress.total) * 100}%` 
-                      : '0%' 
-                  }}
-                />
-              </div>
-            </div>
-          </div>
+     
+{/* Progress Banner - Show when license generation is in progress */}
+{isQueuePolling && queueProgress && (
+  <div className="licenses-progress-banner" style={{ marginBottom: '24px' }}>
+    <div className="licenses-progress-banner-content">
+      <div className="licenses-progress-banner-icon">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="2" strokeDasharray="12.566" strokeDashoffset="6.283">
+            <animate attributeName="stroke-dashoffset" values="12.566;0;12.566" dur="1.5s" repeatCount="indefinite" />
+          </circle>
+        </svg>
+      </div>
+      <div className="licenses-progress-banner-text">
+        <strong>Creating your licenses...</strong>
+        <span>
+          {queueProgress.completed || 0} of {queueProgress.total || '?'}
+          {queueProgress.processing > 0 && ` (${queueProgress.processing} processing)`}
+        </span>
+      </div>
+      <div className="licenses-progress-banner-bar-wrapper">
+        <div className="licenses-progress-banner-bar">
+          <div 
+            className="licenses-progress-banner-bar-fill" 
+            style={{ 
+              width: queueProgress.total > 0 
+                ? `${((queueProgress.completed || 0) / queueProgress.total) * 100}%` 
+                : '0%' 
+            }}
+          />
         </div>
-      )}
+      </div>
+    </div>
+  </div>
+)}
+
+
 
       {/* Recent Domains Table */}
       <div className="recent-domains-section">

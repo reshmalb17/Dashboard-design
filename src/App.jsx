@@ -322,15 +322,16 @@ const initialRender = useRef(true);
 
     if (sessionId && pendingLicensePurchase) {
       const purchaseInfo = JSON.parse(pendingLicensePurchase);
-      sessionStorage.removeItem('pendingLicensePurchase');
-
+      // DON'T remove pendingLicensePurchase here - let Dashboard component handle it
+      // sessionStorage.removeItem('pendingLicensePurchase'); // REMOVED
+    
       showSuccess(
         `Payment successful! Processing ${purchaseInfo.quantity} license key(s)...`
       );
-
+    
       setIsPollingLicenses(true);
       startLicensePolling(userEmail, purchaseInfo.quantity);
-
+    
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (sessionId && pendingDomainPurchase) {
       const purchaseInfo = JSON.parse(pendingDomainPurchase);

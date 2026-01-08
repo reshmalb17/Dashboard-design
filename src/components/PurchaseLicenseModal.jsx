@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNotification } from '../hooks/useNotification';
 import { useMemberstack } from '../hooks/useMemberstack';
 import { purchaseQuantity } from '../services/api';
@@ -10,6 +10,29 @@ export default function PurchaseLicenseModal({ isOpen, onClose }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const { showSuccess, showError } = useNotification();
   const { userEmail } = useMemberstack();
+
+  // Listen for payment completion messages from popup
+  useEffect(() => {
+    const handleMessage = (event) => {
+      // Verify origin for security
+      if (event.origin !== window.location.origin) return;
+      
+      if (event.data && event.data.type === 'PAYMENT_SUCCESS') {
+        // Payment completed - close modal and let progress bar show
+        setIsProcessing(false);
+        onClose();
+      } else if (event.data && event.data.type === 'PAYMENT_CANCELLED') {
+        // Payment cancelled - reset processing state
+        setIsProcessing(false);
+      }
+    };
+    
+    window.addEventListener('message', handleMessage);
+    
+    return () => {
+      window.removeEventListener('message', handleMessage);
+    };
+  }, [onClose]);
 
   // Pricing
   const monthlyPrice = 8;  // per license
@@ -47,19 +70,32 @@ export default function PurchaseLicenseModal({ isOpen, onClose }) {
       const response = await purchaseQuantity(userEmail, quantity, billingCycle.toLowerCase());
       
       if (response?.checkout_url) {
+        // Store pending purchase info for polling when user returns
         sessionStorage.setItem('pendingLicensePurchase', JSON.stringify({
           quantity,
           billingPeriod: billingCycle.toLowerCase(),
           timestamp: Date.now()
         }));
         
-        const checkoutWindow = window.open(response.checkout_url, '_blank');
+        // Open checkout in new window/popup
+        const checkoutWindow = window.open(response.checkout_url, '_blank', 'width=600,height=700');
         
         if (!checkoutWindow || checkoutWindow.closed) {
+          // Fallback to redirect if popup blocked
           setTimeout(() => {
             window.location.href = response.checkout_url;
           }, 500);
         } else {
+          // Check if popup was closed manually (user cancelled)
+          const checkClosed = setInterval(() => {
+            if (checkoutWindow.closed) {
+              clearInterval(checkClosed);
+              setIsProcessing(false);
+            }
+          }, 1000);
+          
+          // Cleanup interval when component unmounts or payment completes
+          // The global message listener in useEffect will handle payment success
           onClose();
         }
       } else {
