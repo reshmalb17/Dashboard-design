@@ -472,6 +472,7 @@ const initialRender = useRef(true);
   });
 
   const sites = useMemo(() => dashboardData?.sites ?? {}, [dashboardData?.sites]);
+ console.log(sites)
   const licenses = useMemo(
     () => licensesData?.licenses ?? [],
     [licensesData?.licenses]

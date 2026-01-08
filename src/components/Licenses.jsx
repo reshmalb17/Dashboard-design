@@ -476,32 +476,25 @@ export default function Licenses({ licenses }) {
   const MENU_WIDTH = 180;
   const MENU_HEIGHT = 140;
 
-  const handleContextMenu = (e, licenseId) => {
-    // no menu in Cancelled tab
-    if (activeTab === 'Cancelled') return;
+const handleContextMenu = (e, licenseId) => {
+  if (activeTab === 'Cancelled') return;
 
-    e.preventDefault();
-    e.stopPropagation();
+  e.preventDefault();
+  e.stopPropagation();
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
+  const button = e.currentTarget;
+  const rect = button.getBoundingClientRect();
+  const viewportHeight = window.innerHeight;
 
-    let top = rect.bottom + 6;
-    let left = rect.left - MENU_WIDTH + rect.width;
+  const spaceBelow = viewportHeight - rect.bottom;
+  const shouldOpenUpwards = spaceBelow < MENU_HEIGHT + 8;
 
-    if (top + MENU_HEIGHT > viewportHeight) {
-      top = rect.top - MENU_HEIGHT - 6;
-    }
-    if (left + MENU_WIDTH > viewportWidth) {
-      left = viewportWidth - MENU_WIDTH - 8;
-    }
-    if (left < 8) {
-      left = 8;
-    }
+  setContextMenu({
+    licenseId,
+    direction: shouldOpenUpwards ? 'up' : 'down',
+  });
+};
 
-    setContextMenu({ licenseId, top, left });
-  };
 
   const handleOpenActivateModal = (licenseId) => {
     setActivateModal({ id: licenseId });
@@ -608,10 +601,10 @@ export default function Licenses({ licenses }) {
     }
 
     // Validate domain pattern and check for duplicates
-    const isValid = await validateDomain(domainInput);
-    if (!isValid) {
-      return; // Error message is set by validateDomain
-    }
+    // const isValid = await validateDomain(domainInput);
+    // if (!isValid) {
+    //   return; // Error message is set by validateDomain
+    // }
 
     const domainToActivate = domainInput.trim();
     const licenseId = activateModal.id;
@@ -914,7 +907,7 @@ export default function Licenses({ licenses }) {
               <tr>
                 <th>License Key</th>
                 <th>Billing Period</th>
-                <th>Platform</th>
+                {activeTab!=="Not Assigned" && <th>Platform</th>}
                 <th>Activated for site</th>
                 <th>Created date</th>
                 <th>Expiry date</th>
@@ -1028,11 +1021,11 @@ export default function Licenses({ licenses }) {
                       {license.billingPeriod}
                     </div>
                   </td>
-                  <td>
+                  {activeTab !== "Not Assigned" && <td>
                     <div className="license-cell-content">
                       {license.platform || 'N/A'}
                     </div>
-                  </td>
+                  </td>}
                   <td>
                     <div className="license-cell-content">
                       <span
@@ -1083,11 +1076,11 @@ export default function Licenses({ licenses }) {
                           <div
                             ref={contextMenuRef}
                             className="license-context-menu"
-                            style={{
-                              position: 'fixed',
-                              top: contextMenu.top,
-                              left: contextMenu.left,
-                            }}
+                           style={{
+      position: 'absolute',
+      top: `-50px`,
+      left: contextMenu.left,
+    }}
                           >
                             {/* NOT ASSIGNED TAB: copy + activate */}
                             {activeTab === 'Not Assigned' && (

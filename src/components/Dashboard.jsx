@@ -49,7 +49,11 @@ export default function Dashboard({
   const { showSuccess, showError } = useNotification();
   const queryClient = useQueryClient();
   const { userEmail } = useMemberstack();
-
+console.log(sites)
+const licenseMap = new Map(
+  licenses.map(lic => [lic.subscription_id, lic.license_key])
+);
+console.log(licenseMap);
   // Check queue status and update progress (for license generation)
   const checkQueueStatus = useCallback(async () => {
     if (queueStoppedRef.current || !userEmail) return;
@@ -182,11 +186,12 @@ export default function Dashboard({
       (site) => site.status === "active" || site.status === "pending",
     ).length;
 
-    const webflowCount = Object.values(sites).filter(
+    const webflowCount = Object.values(activatedSites).filter(
       (site) => site.platform === "webflow" || site.source === "webflow",
     ).length;
+    
 
-    const framerCount = Object.values(sites).filter(
+    const framerCount = Object.values(activatedSites).filter(
       (site) => site.platform === "framer" || site.source === "framer",
     ).length;
 
@@ -474,7 +479,9 @@ export default function Dashboard({
         null;
 
       // Get platform from site data
-      const platform = siteData?.platform || siteData?.source || "N/A";
+      // const platform = siteData?.platform || siteData?.source || "N/A";
+      const platform = license.platform || "pending";
+      console.log("platform",platform)
       const platformDisplay = platform !== "N/A" 
         ? platform.charAt(0).toUpperCase() + platform.slice(1).toLowerCase()
         : "N/A";
@@ -508,7 +515,7 @@ export default function Dashboard({
   // Filter domains based on search query and billing period
   const filteredDomains = useMemo(() => {
     let filtered = recentDomains;
-
+console.log("hii",recentDomains)
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
@@ -535,6 +542,14 @@ export default function Dashboard({
 
     return filtered;
   }, [recentDomains, searchQuery, billingPeriodFilter]);
+console.log(filteredDomains)
+
+
+const updatedFilteredDomains = filteredDomains.map(domain => ({
+  ...domain,
+  licenseKey: licenseMap.get(domain.subscriptionId) || null,
+}));
+
 
   useEffect(() => {
     if (searchExpanded && searchInputRef.current) {
@@ -912,7 +927,7 @@ export default function Dashboard({
               </tr>
             </thead>
             <tbody>
-              {filteredDomains.map((domain) => (
+              {updatedFilteredDomains.map((domain) => (
                 <tr key={domain.id}>
                   <td className="black">{domain.domain}</td>
                   <td>
