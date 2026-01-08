@@ -809,7 +809,8 @@ font-weight: 500;
 /* Responsive */
 @media (max-width: 768px) {
   .licenses-header {
-   
+   flex-direction: column;
+    align-items: flex-start;
     gap: 16px;
   }
 
@@ -832,7 +833,7 @@ font-weight: 500;
 
   .activate-modal {
     width: 95%;
-    margin: 20px;
+   
   }
 }
 .global-blocker {
