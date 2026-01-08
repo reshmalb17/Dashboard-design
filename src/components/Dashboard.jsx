@@ -49,7 +49,11 @@ export default function Dashboard({
   const { showSuccess, showError } = useNotification();
   const queryClient = useQueryClient();
   const { userEmail } = useMemberstack();
-
+console.log(sites)
+const licenseMap = new Map(
+  licenses.map(lic => [lic.subscription_id, lic.license_key])
+);
+console.log(licenseMap);
   // Check queue status and update progress (for license generation)
 // ... existing code ...
 
@@ -245,6 +249,7 @@ useEffect(() => {
     const webflowCount = Array.from(sitePlatformMap.values()).filter(
       (platform) => platform === "webflow"
     ).length;
+    
 
     const framerCount = Array.from(sitePlatformMap.values()).filter(
       (platform) => platform === "framer"
@@ -542,7 +547,9 @@ useEffect(() => {
         null;
 
       // Get platform from site data
-      const platform = siteData?.platform || siteData?.source || "N/A";
+      // const platform = siteData?.platform || siteData?.source || "N/A";
+      const platform = license.platform || "pending";
+      console.log("platform",platform)
       const platformDisplay = platform !== "N/A" 
         ? platform.charAt(0).toUpperCase() + platform.slice(1).toLowerCase()
         : "N/A";
@@ -576,7 +583,7 @@ useEffect(() => {
   // Filter domains based on search query and billing period
   const filteredDomains = useMemo(() => {
     let filtered = recentDomains;
-
+console.log("hii",recentDomains)
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
@@ -603,6 +610,14 @@ useEffect(() => {
 
     return filtered;
   }, [recentDomains, searchQuery, billingPeriodFilter]);
+console.log(filteredDomains)
+
+
+const updatedFilteredDomains = filteredDomains.map(domain => ({
+  ...domain,
+  licenseKey: licenseMap.get(domain.subscriptionId) || null,
+}));
+
 
   useEffect(() => {
     if (searchExpanded && searchInputRef.current) {
@@ -1140,7 +1155,7 @@ useEffect(() => {
               </tr>
             </thead>
             <tbody>
-              {filteredDomains.map((domain) => (
+              {updatedFilteredDomains.map((domain) => (
                 <tr key={domain.id}>
                   <td className="black">{domain.domain}</td>
                   <td>

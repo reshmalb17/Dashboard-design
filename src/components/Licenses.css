@@ -336,6 +336,7 @@ border-radius: 50px;
 .license-actions {
   justify-content: flex-end;
   gap: 8px;
+  position: relative;
 }
 
 .license-activate-btn {
@@ -821,6 +822,7 @@ font-weight: 500;
 
   .licenses-search-wrapper {
     width: 100%;
+    justify-content: flex-end;
   }
 
   .licenses-search-input {

@@ -336,10 +336,14 @@ body #root {
 }
 
 @media (max-width: 480px) {
-
+.cancel-modal-actions {
+    
+    flex-direction: column;
+}
   .licenses-filter-tabs {
     flex-direction: column;
     align-items: stretch;
+    margin-bottom: 11px;
   }
   .dashboard-header {
     padding: 0px;
