@@ -44,22 +44,13 @@ export function useLicenses(userEmail, options = {}) {
   return useQuery({
     queryKey: queryKeys.licenses(userEmail),
     queryFn: async () => {
-      // This function is ONLY called when data doesn't exist in cache
-      // With staleTime: Infinity, cached data will be used automatically
       const data = await getLicenses(userEmail);
       return data;
     },
     enabled: !!userEmail && !options.disabled,
-    // Data is considered fresh forever - will use cache and NOT refetch from server
-    staleTime: Infinity, // Never consider data stale - use cached data forever
-    gcTime: 24 * 60 * 60 * 1000, // Keep in cache for 24 hours
-    retry: 2, // Retry on failure
-    // Never refetch - always use cached data if available
-    refetchOnMount: false, // Use cached data, don't refetch
-    refetchOnWindowFocus: false, // Use cached data, don't refetch
-    refetchOnReconnect: false, // Use cached data, don't refetch
-    refetchInterval: false, // Disable automatic refetching
-    // Only fetch if data doesn't exist in cache
+    staleTime: options.staleTime ?? 5000, // optional short staleTime
+    refetchInterval: options.refetchInterval ?? 5000, // poll every 5s by default
+    retry: 2,
     ...options,
   });
 }
