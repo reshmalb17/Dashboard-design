@@ -39,83 +39,123 @@ export default function Dashboard({
   const contextMenuRef = useRef(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelModal, setCancelModal] = useState(null);
-  const [totalCount, setTotalCount] = useState(0);
   
   // Queue polling state for license generation progress
   const [isQueuePolling, setIsQueuePolling] = useState(false);
-  const [queueProgress, setQueueProgress] = useState(initialValue => ({ completed: 0, total: 0, processing: 0 }));
+  const [queueProgress, setQueueProgress] = useState(null);
   const queueIntervalIdRef = useRef(null);
   const queueStoppedRef = useRef(false);
   
   const { showSuccess, showError } = useNotification();
   const queryClient = useQueryClient();
   const { userEmail } = useMemberstack();
- let completed ;
- let total;
- let progress;
- let processing;
-
+console.log(sites)
+const licenseMap = new Map(
+  licenses.map(lic => [lic.subscription_id, lic.license_key])
+);
+console.log(licenseMap);
+  // Check queue status and update progress (for license generation)
+// ... existing code ...
 
 
 const checkQueueStatus = useCallback(async () => {
-  if (!userEmail || queueStoppedRef.current) return;
+  if (queueStoppedRef.current || !userEmail) return;
 
   try {
     const data = await getLicensesStatus(userEmail);
-    console.log("[Dashboard] Queue status:", data);
+    console.log('[Dashboard] Queue status response:', data); // Debug log
 
-    const status = (data.status || "").toLowerCase().trim();
+    const status = (data.status || '').toLowerCase().trim();
+    const progress = data.progress || {};
 
-    const pendingRaw = sessionStorage.getItem("pendingLicensePurchase");
-    if (!pendingRaw) return;
-    const pending = JSON.parse(pendingRaw);
-   const total = pending?.quantity || 0;
-    // setTotalCount(pending?.quantity || 0);
-
-    let completedBackend = data.progress?.completed ?? 0;
-    completed = Math.min(completedBackend, totalCount);
-     processing = Math.max(totalCount - completed, 0);
-    // Prepare progress object
-     progress = { completed, total, processing };
-
-    // Update state once
-    setQueueProgress(progress);
-
-    // Decide if polling continues
-    if (status === "pending" || status === "processing") {
+    if (status === 'pending' || status === 'processing') {
       setIsQueuePolling(true);
-    } else {
-      // Stop polling if completed or failed
+      setQueueProgress(progress);
+      
+      // Force refetch license data periodically to show new licenses as they're created
+      // Use refetchQueries with force: true to bypass staleTime: Infinity
+      const dashboardResult = await queryClient.refetchQueries({
+        queryKey: queryKeys.dashboard(userEmail),
+        type: 'active',
+      });
+      
+      const licensesResult = await queryClient.refetchQueries({
+        queryKey: queryKeys.licenses(userEmail),
+        type: 'active',
+      });
+      
+      // Update cache directly with new data if refetch succeeded
+      if (licensesResult && licensesResult.length > 0 && licensesResult[0].data) {
+        queryClient.setQueryData(queryKeys.licenses(userEmail), licensesResult[0].data);
+      }
+      
+      if (dashboardResult && dashboardResult.length > 0 && dashboardResult[0].data) {
+        queryClient.setQueryData(queryKeys.dashboard(userEmail), dashboardResult[0].data);
+      }
+    } else if (status === 'completed') {
       setIsQueuePolling(false);
+      setQueueProgress(null);
       queueStoppedRef.current = true;
-
+      
       if (queueIntervalIdRef.current) {
         clearInterval(queueIntervalIdRef.current);
         queueIntervalIdRef.current = null;
       }
-
-      if (status === "completed" || completed >= total) {
-        sessionStorage.removeItem("pendingLicensePurchase");
-
-        await queryClient.refetchQueries({
-          queryKey: queryKeys.licenses(userEmail),
-          type: "active",
-        });
-
-        showSuccess(`Successfully created ${total} license${total > 1 ? "s" : ""}!`);
+      
+      sessionStorage.removeItem('pendingLicensePurchase');
+      
+      // Final refresh to get all licenses - force refetch and update cache
+      const dashboardResult = await queryClient.refetchQueries({
+        queryKey: queryKeys.dashboard(userEmail),
+        type: 'active',
+      });
+      
+      const licensesResult = await queryClient.refetchQueries({
+        queryKey: queryKeys.licenses(userEmail),
+        type: 'active',
+      });
+      
+      // Update cache directly with new data
+      if (licensesResult && licensesResult.length > 0 && licensesResult[0].data) {
+        queryClient.setQueryData(queryKeys.licenses(userEmail), licensesResult[0].data);
       }
-
-      if (status === "failed") {
-        setQueueProgress({ completed: 0, total, processing: total });
-        sessionStorage.removeItem("pendingLicensePurchase");
-        showError(data.message || "License creation failed.");
+      
+      if (dashboardResult && dashboardResult.length > 0 && dashboardResult[0].data) {
+        queryClient.setQueryData(queryKeys.dashboard(userEmail), dashboardResult[0].data);
       }
+      
+      // Show success message
+      const completedCount = progress.completed || 0;
+      if (completedCount > 0) {
+        showSuccess(`Successfully created ${completedCount} license${completedCount > 1 ? 's' : ''}!`);
+      } else {
+        showSuccess('License creation completed!');
+      }
+    } else if (status === 'failed') {
+      setIsQueuePolling(false);
+      setQueueProgress(null);
+      queueStoppedRef.current = true;
+      
+      if (queueIntervalIdRef.current) {
+        clearInterval(queueIntervalIdRef.current);
+        queueIntervalIdRef.current = null;
+      }
+      
+      sessionStorage.removeItem('pendingLicensePurchase');
+      
+      showError(
+        data.message ||
+          'License creation failed. Please contact support or try again.'
+      );
+    } else {
+      // Unknown status - log it but don't stop polling
+      console.log('[Dashboard] Unknown queue status:', status, data);
     }
   } catch (err) {
-    console.error("[Dashboard] Queue polling error:", err);
+    // Log error but don't stop polling
+    console.error('[Dashboard] Error checking queue status:', err);
   }
 }, [userEmail, queryClient, showSuccess, showError]);
-
 
 // Start polling when component mounts if there's a pending purchase
 useEffect(() => {
@@ -209,6 +249,7 @@ useEffect(() => {
     const webflowCount = Array.from(sitePlatformMap.values()).filter(
       (platform) => platform === "webflow"
     ).length;
+    
 
     const framerCount = Array.from(sitePlatformMap.values()).filter(
       (platform) => platform === "framer"
@@ -506,7 +547,9 @@ useEffect(() => {
         null;
 
       // Get platform from site data
-      const platform = siteData?.platform || siteData?.source || "N/A";
+      // const platform = siteData?.platform || siteData?.source || "N/A";
+      const platform = license.platform || "pending";
+      console.log("platform",platform)
       const platformDisplay = platform !== "N/A" 
         ? platform.charAt(0).toUpperCase() + platform.slice(1).toLowerCase()
         : "N/A";
@@ -540,7 +583,7 @@ useEffect(() => {
   // Filter domains based on search query and billing period
   const filteredDomains = useMemo(() => {
     let filtered = recentDomains;
-
+console.log("hii",recentDomains)
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
@@ -567,6 +610,14 @@ useEffect(() => {
 
     return filtered;
   }, [recentDomains, searchQuery, billingPeriodFilter]);
+console.log(filteredDomains)
+
+
+const updatedFilteredDomains = filteredDomains.map(domain => ({
+  ...domain,
+  licenseKey: licenseMap.get(domain.subscriptionId) || null,
+}));
+
 
   useEffect(() => {
     if (searchExpanded && searchInputRef.current) {
@@ -667,38 +718,6 @@ useEffect(() => {
     }
   }, [contextMenu]);
 
-  useEffect(() => {
-  if (!userEmail) return;
-
-  const pendingRaw = sessionStorage.getItem("pendingLicensePurchase");
-  if (!pendingRaw) return;
-
-  const pending = JSON.parse(pendingRaw);
-  const age = Date.now() - (pending.timestamp || 0);
-
-  // Only poll if purchase is < 30 minutes old
-  if (age > 30 * 60 * 1000) {
-    sessionStorage.removeItem("pendingLicensePurchase");
-    return;
-  }
-
-  queueStoppedRef.current = false;
-  setIsQueuePolling(true);
-
-  // Immediate check
-  checkQueueStatus();
-
-  // Poll every 3 seconds
-  queueIntervalIdRef.current = setInterval(checkQueueStatus, 3000);
-
-  return () => {
-    if (queueIntervalIdRef.current) {
-      clearInterval(queueIntervalIdRef.current);
-      queueIntervalIdRef.current = null;
-    }
-  };
-}, [userEmail, checkQueueStatus]);
-
   const handleOpenCancelModal = (subscriptionId, domainName, siteDomain) => {
     setCancelModal({ subscriptionId, domainName, siteDomain });
     setContextMenu(null);
@@ -709,7 +728,103 @@ useEffect(() => {
     setCancelModal(null);
   };
 
-  
+  // const handleCancelSubscription = async () => {
+  //   if (isCancelling) return;
+  //   if (!cancelModal) return;
+
+  //   const { subscriptionId, siteDomain, domainName } = cancelModal;
+
+  //   if (!userEmail) {
+  //     showError("User email not found. Please refresh the page.");
+  //     return;
+  //   }
+
+  //   if (!subscriptionId) {
+  //     showError("Subscription ID not found.");
+  //     return;
+  //   }
+
+  //   if (!siteDomain) {
+  //     showError("Site domain not found.");
+  //     return;
+  //   }
+
+  //   setIsCancelling(true);
+
+  //   try {
+  //     const response = await cancelSubscription(
+  //       userEmail,
+  //       siteDomain,
+  //       subscriptionId,
+  //     );
+  //     const message =
+  //       response.message ||
+  //       "Subscription cancelled successfully. The subscription will remain active until the end of the current billing period.";
+  //     showSuccess(message);
+
+  //     // Update dashboard cache
+  //     queryClient.setQueryData(
+  //       queryKeys.dashboard(userEmail),
+  //       (oldData) => {
+  //         if (!oldData) return oldData;
+
+  //         // Update sites
+  //         const updatedSites = { ...oldData.sites };
+  //         if (updatedSites[siteDomain]) {
+  //           updatedSites[siteDomain] = {
+  //             ...updatedSites[siteDomain],
+  //             status: 'cancelled',
+  //           };
+  //         }
+
+  //         // Update subscriptions
+  //         const subscriptionsArray = Array.isArray(oldData.subscriptions)
+  //           ? oldData.subscriptions
+  //           : Object.values(oldData.subscriptions || {});
+          
+  //         const updatedSubscriptions = subscriptionsArray.map((sub) => {
+  //           const subId = sub.subscription_id || sub.subscriptionId || sub.id;
+  //           if (subId === subscriptionId) {
+  //             return {
+  //               ...sub,
+  //               status: 'cancelled',
+  //             };
+  //           }
+  //           return sub;
+  //         });
+
+  //         // Convert back to original format if it was an object
+  //         const subscriptionsFormatted = Array.isArray(oldData.subscriptions)
+  //           ? updatedSubscriptions
+  //           : updatedSubscriptions.reduce((acc, sub) => {
+  //               const subId = sub.subscription_id || sub.subscriptionId || sub.id;
+  //               if (subId) {
+  //                 acc[subId] = sub;
+  //               }
+  //               return acc;
+  //             }, {});
+
+  //         return {
+  //           ...oldData,
+  //           sites: updatedSites,
+  //           subscriptions: subscriptionsFormatted,
+  //         };
+  //       }
+  //     );
+
+  //     // Invalidate queries to trigger UI updates
+  //     await queryClient.invalidateQueries({
+  //       queryKey: queryKeys.dashboard(userEmail),
+  //     });
+
+  //     handleCloseCancelModal();
+  //   } catch (error) {
+  //     const errorMessage = error.message || error.error || "Unknown error";
+  //     showError("Failed to cancel subscription: " + errorMessage);
+  //   } finally {
+  //     setIsCancelling(false);
+  //   }
+  // };
   const handleCancelSubscription = async () => {
     if (isCancelling) return;
     if (!cancelModal) return;
@@ -867,8 +982,6 @@ useEffect(() => {
     }
   };
 
-  
-
   return (
     <div className="dashboard-section">
       {/* Summary Statistics */}
@@ -938,45 +1051,31 @@ useEffect(() => {
       {/* Progress Banner - Show when license generation is in progress */}
      
 {/* Progress Banner - Show when license generation is in progress */}
-{/* Progress Banner - Show when license generation is in progress */}
-{/* Progress Banner - Show when license generation is in progress */}
-{/* Progress Banner - Show when license generation is in progress */}
-{isQueuePolling && (total>0) && (
+{isQueuePolling && queueProgress && (
   <div className="licenses-progress-banner" style={{ marginBottom: '24px' }}>
     <div className="licenses-progress-banner-content">
       <div className="licenses-progress-banner-icon">
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-          <circle
-            cx="10"
-            cy="10"
-            r="8"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeDasharray="12.566"
-            strokeDashoffset="6.283"
-          >
-            <animate
-              attributeName="stroke-dashoffset"
-              values="12.566;0;12.566"
-              dur="1.5s"
-              repeatCount="indefinite"
-            />
+          <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="2" strokeDasharray="12.566" strokeDashoffset="6.283">
+            <animate attributeName="stroke-dashoffset" values="12.566;0;12.566" dur="1.5s" repeatCount="indefinite" />
           </circle>
         </svg>
       </div>
       <div className="licenses-progress-banner-text">
         <strong>Creating your licenses...</strong>
         <span>
-          {totalCount} of {total} {processing > 0 && `(${processing} processing)`}
+          {queueProgress.completed || 0} of {queueProgress.total || '?'}
+          {queueProgress.processing > 0 && ` (${queueProgress.processing} processing)`}
         </span>
       </div>
       <div className="licenses-progress-banner-bar-wrapper">
         <div className="licenses-progress-banner-bar">
-          <div
-            className="licenses-progress-banner-bar-fill"
-            style={{
-              width: `${Math.min((completed / total) * 100, 100)}%`,
-              transition: 'width 0.3s ease',
+          <div 
+            className="licenses-progress-banner-bar-fill" 
+            style={{ 
+              width: queueProgress.total > 0 
+                ? `${((queueProgress.completed || 0) / queueProgress.total) * 100}%` 
+                : '0%' 
             }}
           />
         </div>
@@ -984,9 +1083,6 @@ useEffect(() => {
     </div>
   </div>
 )}
-
-
-
 
 
 
@@ -1059,7 +1155,7 @@ useEffect(() => {
               </tr>
             </thead>
             <tbody>
-              {filteredDomains.map((domain) => (
+              {updatedFilteredDomains.map((domain) => (
                 <tr key={domain.id}>
                   <td className="black">{domain.domain}</td>
                   <td>
