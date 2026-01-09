@@ -38,6 +38,7 @@ export default function Licenses({ licenses }) {
 
     try {
       const data = await getLicensesStatus(userEmail);
+      console.log('[Licenses] Queue status response:', data); // Debug log
 
       const status = (data.status || '').toLowerCase().trim();
       const progress = data.progress || {};
@@ -48,14 +49,24 @@ export default function Licenses({ licenses }) {
         
         // Force refetch license data periodically to show new licenses as they're created
         // Use refetchQueries to bypass staleTime: Infinity
-        await queryClient.refetchQueries({
+        const dashboardResult = await queryClient.refetchQueries({
           queryKey: queryKeys.dashboard(userEmail),
           type: 'active',
         });
-        await queryClient.refetchQueries({
+        
+        const licensesResult = await queryClient.refetchQueries({
           queryKey: queryKeys.licenses(userEmail),
           type: 'active',
         });
+        
+        // Update cache directly with new data if refetch succeeded
+        if (licensesResult && licensesResult.length > 0 && licensesResult[0].data) {
+          queryClient.setQueryData(queryKeys.licenses(userEmail), licensesResult[0].data);
+        }
+        
+        if (dashboardResult && dashboardResult.length > 0 && dashboardResult[0].data) {
+          queryClient.setQueryData(queryKeys.dashboard(userEmail), dashboardResult[0].data);
+        }
       } else if (status === 'completed') {
         setIsQueuePolling(false);
         setQueueProgress(null);
@@ -68,15 +79,25 @@ export default function Licenses({ licenses }) {
         
         sessionStorage.removeItem('pendingLicensePurchase');
         
-        // Final refresh to get all licenses - force refetch
-        await queryClient.refetchQueries({
+        // Final refresh to get all licenses - force refetch and update cache
+        const dashboardResult = await queryClient.refetchQueries({
           queryKey: queryKeys.dashboard(userEmail),
           type: 'active',
         });
-        await queryClient.refetchQueries({
+        
+        const licensesResult = await queryClient.refetchQueries({
           queryKey: queryKeys.licenses(userEmail),
           type: 'active',
         });
+        
+        // Update cache directly with new data
+        if (licensesResult && licensesResult.length > 0 && licensesResult[0].data) {
+          queryClient.setQueryData(queryKeys.licenses(userEmail), licensesResult[0].data);
+        }
+        
+        if (dashboardResult && dashboardResult.length > 0 && dashboardResult[0].data) {
+          queryClient.setQueryData(queryKeys.dashboard(userEmail), dashboardResult[0].data);
+        }
         
         // Show success message - use completed count from queue, not total licenses
         const completedCount = progress.completed || 0;
@@ -101,9 +122,13 @@ export default function Licenses({ licenses }) {
           data.message ||
             'License creation failed. Please contact support or try again.'
         );
+      } else {
+        // Unknown status - log it but don't stop polling
+        console.log('[Licenses] Unknown queue status:', status, data);
       }
     } catch (err) {
-      // Don't stop polling on error, continue polling
+      // Log error but don't stop polling
+      console.error('[Licenses] Error checking queue status:', err);
     }
   }, [userEmail, queryClient, showSuccess, showError]);
 
@@ -151,7 +176,7 @@ export default function Licenses({ licenses }) {
     };
   }, [userEmail, checkStatus]);
 
-
+// ... existing code ...
   // Prepare licenses
   const displayLicenses =
     licenses && licenses.length > 0
@@ -768,6 +793,40 @@ const handleContextMenu = (e, licenseId) => {
 
   return (
     <div className="licenses-container">
+
+      {/* Progress Banner - Show when license generation is in progress */}
+      {isQueuePolling && queueProgress && (
+        <div className="licenses-progress-banner" style={{ marginBottom: '24px' }}>
+          <div className="licenses-progress-banner-content">
+            <div className="licenses-progress-banner-icon">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="2" strokeDasharray="12.566" strokeDashoffset="6.283">
+                  <animate attributeName="stroke-dashoffset" values="12.566;0;12.566" dur="1.5s" repeatCount="indefinite" />
+                </circle>
+              </svg>
+            </div>
+            <div className="licenses-progress-banner-text">
+              <strong>Creating your licenses...</strong>
+              <span>
+                {queueProgress.completed || 0} of {queueProgress.total || '?'}
+                {queueProgress.processing > 0 && ` (${queueProgress.processing} processing)`}
+              </span>
+            </div>
+            <div className="licenses-progress-banner-bar-wrapper">
+              <div className="licenses-progress-banner-bar">
+                <div 
+                  className="licenses-progress-banner-bar-fill" 
+                  style={{ 
+                    width: queueProgress.total > 0 
+                      ? `${((queueProgress.completed || 0) / queueProgress.total) * 100}%` 
+                      : '0%' 
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div className="licenses-header">
