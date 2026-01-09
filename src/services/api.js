@@ -4,7 +4,7 @@
  */
 
 // Using production server directly
-const API_BASE = 'cookie.https://cookie.consentbit.com';
+const API_BASE = 'https://cookie.consentbit.com';
 
 
 // Request timeout (30 seconds for dashboard, 10 seconds for others)
