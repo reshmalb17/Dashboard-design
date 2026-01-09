@@ -4,7 +4,7 @@
  */
 
 // Using production server directly
-const API_BASE = import.meta.env.VITE_API_BASE || 'https://consentbit-dashboard-test.web-8fb.workers.dev';
+const API_BASE = 'cookie.https://cookie.consentbit.com';
 
 
 // Request timeout (30 seconds for dashboard, 10 seconds for others)
