@@ -49,14 +49,11 @@ export default function Dashboard({
   const { showSuccess, showError } = useNotification();
   const queryClient = useQueryClient();
   const { userEmail } = useMemberstack();
-console.log(sites.subscriptions)
 
 const licenseMap = new Map(
   licenses.map(lic => [lic.subscription_id, lic.license_key])
 );
-console.log(licenseMap);
-  // Check queue status and update progress (for license generation)
-// ... existing code ...
+
 
 
 const checkQueueStatus = useCallback(async () => {
@@ -64,7 +61,6 @@ const checkQueueStatus = useCallback(async () => {
 
   try {
     const data = await getLicensesStatus(userEmail);
-    console.log('[Dashboard] Queue status response:', data); // Debug log
 
     const status = (data.status || '').toLowerCase().trim();
     const progress = data.progress || {};
@@ -150,11 +146,9 @@ const checkQueueStatus = useCallback(async () => {
       );
     } else {
       // Unknown status - log it but don't stop polling
-      console.log('[Dashboard] Unknown queue status:', status, data);
     }
   } catch (err) {
     // Log error but don't stop polling
-    console.error('[Dashboard] Error checking queue status:', err);
   }
 }, [userEmail, queryClient, showSuccess, showError]);
 
@@ -256,14 +250,7 @@ useEffect(() => {
       (platform) => platform === "framer"
     ).length;
 
-    console.log('[Dashboard] Platform counts:', {
-      webflow: webflowCount,
-      framer: framerCount,
-      totalSitesInMap: sitePlatformMap.size,
-      sitesObjectCount: Object.keys(sites).length,
-      licensesCount: licenses.length
-    });
-
+   
     const activatedLicenseKeys = activatedSites.length;
 
     const notAssignedLicenseKeys = licenses.filter(
@@ -559,7 +546,6 @@ if (createdAt) {
       // Get platform from site data
       // const platform = siteData?.platform || siteData?.source || "N/A";
       const platform = license.platform || "pending";
-      console.log("platform",platform)
       const platformDisplay = platform !== "N/A" 
         ? platform.charAt(0).toUpperCase() + platform.slice(1).toLowerCase()
         : "N/A";
@@ -593,7 +579,6 @@ if (createdAt) {
   // Filter domains based on search query and billing period
   const filteredDomains = useMemo(() => {
     let filtered = recentDomains;
-console.log("hii",recentDomains)
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
@@ -620,7 +605,6 @@ console.log("hii",recentDomains)
 
     return filtered;
   }, [recentDomains, searchQuery, billingPeriodFilter]);
-console.log(filteredDomains)
 
 
 const updatedFilteredDomains = filteredDomains.map(domain => ({

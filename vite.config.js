@@ -7,7 +7,6 @@ export default defineConfig(({ mode }) => {
   // Note: In vite.config.js, we use process.env, not import.meta.env
   const serverUrl = process.env.VITE_API_SERVER_URL || 'https://consentbit-dashboard-test.web-8fb.workers.dev';
   
-  console.log(`[Vite Config] Using API server URL: ${serverUrl}`);
   
   return {
     plugins: [react()],
@@ -42,13 +41,10 @@ export default defineConfig(({ mode }) => {
           rewrite: (path) => path.replace(/^\/api-proxy/, ''),
           configure: (proxy, _options) => {
             proxy.on('error', (err, _req, _res) => {
-              console.log('proxy error', err);
             });
             proxy.on('proxyReq', (proxyReq, req, _res) => {
-              console.log('Sending Request to the Target:', req.method, req.url);
             });
             proxy.on('proxyRes', (proxyRes, req, _res) => {
-              console.log('Received Response from the Target:', proxyRes.statusCode, req.url);
             });
           },
         }

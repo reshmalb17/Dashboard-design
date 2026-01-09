@@ -148,7 +148,6 @@ function AddSiteForm({ userEmail }) {
       { site: 'example.com', price: 'price_123' },
       {
         onSuccess: () => {
-          console.log('Site added!');
         },
         onError: (error) => {
           console.error('Failed:', error);

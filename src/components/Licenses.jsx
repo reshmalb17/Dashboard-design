@@ -38,7 +38,6 @@ export default function Licenses({ licenses }) {
 
     try {
       const data = await getLicensesStatus(userEmail);
-      console.log('[Licenses] Queue status response:', data); // Debug log
 
       const status = (data.status || '').toLowerCase().trim();
       const progress = data.progress || {};
@@ -124,7 +123,6 @@ export default function Licenses({ licenses }) {
         );
       } else {
         // Unknown status - log it but don't stop polling
-        console.log('[Licenses] Unknown queue status:', status, data);
       }
     } catch (err) {
       // Log error but don't stop polling

@@ -368,17 +368,7 @@ export async function removeSite(userEmail, site) {
   });
 }
 
-// // Add sites in batch (for pending sites)
-// export async function createSiteCheckout(email, sites, billingPeriod) {
-//   console.log('Creating site checkout with:', { email, sites, billingPeriod });
-//   return apiRequest('/create-site-checkout', {
-//     method: 'POST',
-//     body: JSON.stringify({
-//       email,
-//       sites,               // ['a.com', 'b.com']
-//       billing_period: billingPeriod, // 'monthly' | 'yearly'
-//     }),
-//   });
+
 // }
 
 
