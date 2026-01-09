@@ -49,7 +49,8 @@ export default function Dashboard({
   const { showSuccess, showError } = useNotification();
   const queryClient = useQueryClient();
   const { userEmail } = useMemberstack();
-console.log(sites)
+console.log(sites.subscriptions)
+
 const licenseMap = new Map(
   licenses.map(lic => [lic.subscription_id, lic.license_key])
 );
@@ -304,50 +305,59 @@ console.log(licenseMap);
         }
 
         // Billing period
-        let billingPeriod = "N/A";
-        if (subscription.billingPeriod) {
-          const period = subscription.billingPeriod.toLowerCase().trim();
-          if (period.endsWith("ly")) {
-            billingPeriod =
-              period.charAt(0).toUpperCase() + period.slice(1);
-          } else {
-            billingPeriod =
-              period.charAt(0).toUpperCase() + period.slice(1) + "ly";
-          }
-        }
+      let billingPeriod = "N/A";
 
-        // Expiration date
-        let expirationDate = "N/A";
-        const renewalDate =
-          item.renewal_date || subscription.current_period_end;
-        if (renewalDate) {
-          try {
-            const timestamp =
-              typeof renewalDate === "number"
-                ? renewalDate
-                : parseInt(renewalDate);
-            const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
-            expirationDate = new Date(dateInMs).toLocaleDateString();
-          } catch {
-            expirationDate = "N/A";
-          }
-        }
+if (siteData?.current_period_start && siteData?.current_period_end) {
+  const diff =
+    siteData.current_period_end - siteData.current_period_start;
+
+  // ~30 days
+  if (diff <= 32 * 24 * 60 * 60) {
+    billingPeriod = "Monthly";
+  } else {
+    billingPeriod = "Yearly";
+  }
+}
+
+       let expirationDate = "N/A";
+
+const renewalDate = siteData?.renewal_date || siteData?.current_period_end;
+
+if (renewalDate) {
+  const ts =
+    typeof renewalDate === "number"
+      ? renewalDate
+      : parseInt(renewalDate);
+
+  expirationDate = new Date(
+    ts < 1e12 ? ts * 1000 : ts
+  ).toLocaleDateString();
+}
 
         // Created date
-        let created = "N/A";
-        const createdAt = item.created_at || subscription.created_at;
-        if (createdAt) {
-          try {
-            const timestamp =
-              typeof createdAt === "number"
-                ? createdAt
-                : parseInt(createdAt);
-            const dateInMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
-            created = new Date(dateInMs).toLocaleDateString();
-          } catch {
-            created = "N/A";
-          }
-        }
+   let created = "N/A";
+
+// TAKE created_at FROM SITES TABLE OBJECT
+const createdAt = siteData?.created_at;
+
+if (createdAt) {
+  try {
+    const timestamp =
+      typeof createdAt === "number"
+        ? createdAt
+        : parseInt(createdAt);
+
+    const dateInMs = timestamp < 1e12
+      ? timestamp * 1000
+      : timestamp;
+
+    created = new Date(dateInMs).toLocaleDateString();
+  } catch {
+    created = "N/A";
+  }
+}
+
+
 
         // Get platform from site data
         const platform = siteData?.platform || siteData?.source || "N/A";
@@ -768,7 +778,7 @@ const updatedFilteredDomains = filteredDomains.map(domain => ({
             className="stat-value"
             style={{ fontSize: "80px", fontWeight: "200" }}
           >
-            {dashboardStats.totalDomains}
+            {recentDomains.length}
           </div>
           <div className="stat-icons">
             <img src={total} alt="total" />
@@ -778,9 +788,11 @@ const updatedFilteredDomains = filteredDomains.map(domain => ({
         <div className="stat-card webflow-card">
           <div className="stat-label">Webflow</div>
           <div className="stat-value">
-            <span>{dashboardStats.webflow.count}</span>
+            <span>{recentDomains.filter(
+  site => site.platform === "Webflow"
+).length}</span>
             <span style={{ fontWeight: 400, color: "#5C577D" }}>
-              /{dashboardStats.webflow.totalDomains}
+              /{recentDomains.length}
             </span>
           </div>
           <div className="stat-background-icon webflow-bg">
@@ -801,9 +813,11 @@ const updatedFilteredDomains = filteredDomains.map(domain => ({
         <div className="stat-card framer-card">
           <div className="stat-label">Framer</div>
           <div className="stat-value">
-            <span>{dashboardStats.framer.count}</span>
+            <span>{recentDomains.filter(
+  site => site.platform === "Framer"
+).length}</span>
             <span style={{ fontWeight: 400, color: "#5C577D" }}>
-              /{dashboardStats.framer.totalDomains}
+              /{recentDomains.length}
             </span>
           </div>
           <div className="stat-background-icon framer-bg">
@@ -927,7 +941,7 @@ const updatedFilteredDomains = filteredDomains.map(domain => ({
               </tr>
             </thead>
             <tbody>
-              {updatedFilteredDomains.map((domain) => (
+              {filteredDomains.map((domain) => (
                 <tr key={domain.id}>
                   <td className="black">{domain.domain}</td>
                   <td>
