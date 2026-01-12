@@ -67,7 +67,7 @@ export default function PurchaseLicenseModal({ isOpen, onClose }) {
   // Poll every 3 seconds
   useEffect(() => {
     if (!polling) return;
-    const interval = setInterval(pollPurchaseStatus, 3000);
+    const interval = setInterval(pollPurchaseStatus, 40000);
     return () => clearInterval(interval);
   }, [polling, pollPurchaseStatus]);
 

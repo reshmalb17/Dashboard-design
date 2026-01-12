@@ -599,11 +599,11 @@ const handleContextMenu = (e, licenseId) => {
       return false;
     }
 
-    // Check pattern
-    if (!validateDomainPattern(trimmedDomain)) {
-      setDomainError('Domain must be in the format: www.sitename.domain (e.g., www.example.com)');
-      return false;
-    }
+    // // Check pattern
+    // if (!validateDomainPattern(trimmedDomain)) {
+    //   setDomainError('Domain must be in the format: www.sitename.domain (e.g., www.example.com)');
+    //   return false;
+    // }
 
     // Check if already activated
     if (checkDomainAlreadyActivated(trimmedDomain)) {
@@ -1197,11 +1197,11 @@ const handleContextMenu = (e, licenseId) => {
               </button>
             </div>
             <div className="activate-modal-body">
-              {isActivatingLicense && (
-                <div className="activate-modal-loading-overlay">
+          {/* /* {isActivatingLicense && (
+              //  <div className="activate-modal-loading-overlay">
                   Activating license...
                 </div>
-              )}
+              )}*/ }
               <input
                 type="text"
                 className={`activate-modal-input ${domainError ? 'error' : ''}`}
