@@ -25,6 +25,10 @@ export default function Licenses({ licenses }) {
   const [queueProgress, setQueueProgress] = useState(null);
   const intervalIdRef = useRef(null);
   const stoppedRef = useRef(false);
+   // ✅ add these two refs
+  const queueStoppedRef = useRef(false);
+ const queueIntervalIdRef = useRef(null);
+
 
   const contextMenuRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -202,14 +206,15 @@ useEffect(() => {
 
 // ... existing code ...
   // Prepare licenses
-  const displayLicenses =
+ const displayLicenses =
     licenses && licenses.length > 0
       ? licenses.map((lic) => {
           const activatedForSite =
             lic.activated_for_site ||
             lic.activatedForSite ||
-            lic.used_site_domain ||
-            lic.site_domain ||
+            lic.usedSiteDomain ||
+            lic.siteDomain
+ ||
             'Not Assigned';
 
           const isActivated =
@@ -217,9 +222,7 @@ useEffect(() => {
             activatedForSite !== null &&
             activatedForSite !== undefined &&
             String(activatedForSite).trim() !== '';
-
           const backendStatus = (lic.status || '').toLowerCase().trim();
-
           let status;
           if (
             backendStatus === 'cancelled' ||
@@ -232,9 +235,8 @@ useEffect(() => {
           } else {
             status = 'Available';
           }
-
           let createdDate = 'N/A';
-          const createdAt = lic.created_at || lic.created_date || lic.createdDate;
+          const createdAt = lic.createdAt || lic.created_date || lic.createdDate;
           if (createdAt) {
             try {
               const timestamp =
@@ -251,10 +253,9 @@ useEffect(() => {
               createdDate = 'N/A';
             }
           }
-
           let expiryDate = 'N/A';
           const expiryTimestamp =
-            lic.renewal_date ||
+            lic.renewalDate ||
             lic.expires_at ||
             lic.expiry_date ||
             lic.expiryDate ||
@@ -277,7 +278,6 @@ useEffect(() => {
               expiryDate = 'N/A';
             }
           }
-
           // Normalize billing period to match filter options
           let billingPeriod = 'N/A';
           const rawBillingPeriod = lic.billing_period || lic.billingPeriod;
@@ -289,13 +289,11 @@ useEffect(() => {
               billingPeriod = period.charAt(0).toUpperCase() + period.slice(1) + 'ly';
             }
           }
-
           // Get platform from license data (if available) or set to N/A
           const platform = lic.platform || lic.source || 'N/A';
-          const platformDisplay = platform !== 'N/A' 
+          const platformDisplay = platform !== 'N/A'
             ? platform.charAt(0).toUpperCase() + platform.slice(1).toLowerCase()
             : 'N/A';
-
           return {
             id: lic.id || lic.license_key,
             licenseKey: lic.license_key || lic.licenseKey || 'N/A',
@@ -310,7 +308,6 @@ useEffect(() => {
           };
         })
       : [];
-
   // Close context menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -1148,7 +1145,7 @@ const handleContextMenu = (e, licenseId) => {
                                 <button
                                   className="context-menu-item"
                                   onClick={() => {
-                                    handleOpenActivateModal(license.id || index);
+                                    handleOpenActivateModal(license.licenseKey || index);
                                   }}
                                 >
                                   <span>Activate License</span>
