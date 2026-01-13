@@ -54,6 +54,7 @@ const licenseMap = new Map(
   licenses.map(lic => [lic.subscription_id, lic.license_key])
 );
 
+// Check queue status and update progress
 const checkQueueStatus = useCallback(async () => {
   if (queueStoppedRef.current || !userEmail) return;
 
@@ -68,7 +69,7 @@ const checkQueueStatus = useCallback(async () => {
     const processing = progress.processing ?? 0;
     const failed = progress.failed ?? 0;
 
-    // ✅ NEW: if backend says "completed" and there was never any work, stop polling silently
+    // If backend says "completed" and there was never any work, stop polling silently
     if (
       status === 'completed' &&
       total === 0 &&
@@ -143,7 +144,9 @@ const checkQueueStatus = useCallback(async () => {
       const completedCount = progress.completed || 0;
       if (completedCount > 0) {
         showSuccess(
-          `Successfully created ${completedCount} license${completedCount > 1 ? 's' : ''}!`
+          `Successfully created ${completedCount} license${
+            completedCount > 1 ? 's' : ''
+          }!`
         );
       } else {
         showSuccess('License creation completed!');
@@ -174,18 +177,18 @@ const checkQueueStatus = useCallback(async () => {
   }
 }, [userEmail, queryClient, showSuccess, showError]);
 
-
-
+// Start polling when component mounts if there's a pending purchase
 useEffect(() => {
   if (!userEmail) return;
 
   const pendingPurchase = sessionStorage.getItem('pendingLicensePurchase');
-  if (pendingPurchase && !queueIntervalIdRef.current) {   // ✅ guard
+  if (pendingPurchase && !queueIntervalIdRef.current) {
     try {
       const purchaseData = JSON.parse(pendingPurchase);
       const purchaseTime = purchaseData.timestamp || 0;
       const timeSincePurchase = Date.now() - purchaseTime;
 
+      // Only start polling if purchase was recent (within last 30 minutes)
       if (timeSincePurchase < 30 * 60 * 1000) {
         queueStoppedRef.current = false;
         setIsQueuePolling(true);
@@ -198,6 +201,7 @@ useEffect(() => {
           checkQueueStatus();
         }, 3000);
       } else {
+        // Purchase is too old, remove from sessionStorage
         sessionStorage.removeItem('pendingLicensePurchase');
       }
     } catch (err) {
@@ -206,6 +210,7 @@ useEffect(() => {
     }
   }
 
+  // Cleanup on unmount
   return () => {
     if (queueIntervalIdRef.current) {
       clearInterval(queueIntervalIdRef.current);
