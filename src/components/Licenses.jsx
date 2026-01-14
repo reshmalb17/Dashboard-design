@@ -209,19 +209,24 @@ useEffect(() => {
  const displayLicenses =
     licenses && licenses.length > 0
       ? licenses.map((lic) => {
-          const activatedForSite =
-            lic.activated_for_site ||
-            lic.activatedForSite ||
-            lic.usedSiteDomain ||
-            lic.siteDomain
- ||
-            'Not Assigned';
+        const activatedForSite =
+  lic.activatedforsite ||
+  lic.activatedForSite ||
+  lic.usedsitedomain ||
+  lic.used_site_domain ||
+  lic.usedSiteDomain ||
+  lic.sitedomain ||
+  lic.site_domain ||
+  lic.siteDomain ||
+  "Not Assigned";
 
-          const isActivated =
-            activatedForSite !== 'Not Assigned' &&
-            activatedForSite !== null &&
-            activatedForSite !== undefined &&
-            String(activatedForSite).trim() !== '';
+
+const isActivated =
+  activatedForSite !== "Not Assigned" &&
+  activatedForSite !== null &&
+  activatedForSite !== undefined &&
+  String(activatedForSite).trim() !== "";
+
           const backendStatus = (lic.status || '').toLowerCase().trim();
           let status;
           if (
@@ -236,7 +241,7 @@ useEffect(() => {
             status = 'Available';
           }
           let createdDate = 'N/A';
-          const createdAt = lic.createdAt || lic.created_date || lic.createdDate;
+         const createdAt = lic.created_at || lic.createdAt || lic.createddate || lic.createdDate;
           if (createdAt) {
             try {
               const timestamp =
@@ -254,12 +259,7 @@ useEffect(() => {
             }
           }
           let expiryDate = 'N/A';
-          const expiryTimestamp =
-            lic.renewalDate ||
-            lic.expires_at ||
-            lic.expiry_date ||
-            lic.expiryDate ||
-            lic.expiration_date;
+         const expiryTimestamp = lic.renewal_date || lic.renewalDate || lic.expiresat || lic.expirydate || lic.expiryDate || lic.expirationdate;
           if (expiryTimestamp) {
             try {
               const timestamp =
@@ -294,18 +294,20 @@ useEffect(() => {
           const platformDisplay = platform !== 'N/A'
             ? platform.charAt(0).toUpperCase() + platform.slice(1).toLowerCase()
             : 'N/A';
-          return {
-            id: lic.id || lic.license_key,
-            licenseKey: lic.license_key || lic.licenseKey || 'N/A',
-            status,
-            billingPeriod,
-            activatedForSite,
-            createdDate,
-            expiryDate,
-            subscriptionId: lic.subscription_id || lic.subscriptionId || null,
-            siteDomain: lic.used_site_domain || lic.site_domain || null,
-            platform: platformDisplay,
-          };
+         return {
+  id: lic.id,
+  licenseKey: lic.license_key || lic.licenseKey || "NA",
+  status,
+  billingPeriod,
+  activatedForSite,
+  isActivated,                    // <-- ADD THIS LINE
+  createdDate,
+  expiryDate,
+  subscriptionId: lic.subscription_id || lic.subscriptionId || null,
+  siteDomain: lic.used_site_domain || lic.site_domain || null,
+  platform: platformDisplay,
+};
+
         })
       : [];
   // Close context menu when clicking outside
@@ -783,13 +785,15 @@ const handleContextMenu = (e, licenseId) => {
 
   // Filter licenses
   const filteredLicenses = displayLicenses.filter((license) => {
-    if (activeTab === 'Not Assigned' && license.activatedForSite !== 'Not Assigned')
-      return false;
-    if (
-      activeTab === 'Activated' &&
-      (license.activatedForSite === 'Not Assigned' || license.status !== 'Active')
-    )
-      return false;
+if (activeTab === "Not Assigned") {
+  if (license.isActivated) return false;
+}
+
+
+   if (activeTab === "Activated") {
+  if (!license.isActivated) return false;
+}
+
     if (activeTab === 'Cancelled' && license.status !== 'Cancelled') return false;
     if (
       searchQuery &&
