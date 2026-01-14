@@ -311,6 +311,7 @@ const isActivated =
         })
       : [];
   // Close context menu when clicking outside
+  console.log('Display Licenses:', displayLicenses);
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (contextMenuRef.current && !contextMenuRef.current.contains(event.target)) {
@@ -784,14 +785,17 @@ const handleContextMenu = (e, licenseId) => {
   };
 
   // Filter licenses
+  console.log('Active Tab:', activeTab);
   const filteredLicenses = displayLicenses.filter((license) => {
 if (activeTab === "Not Assigned") {
   if (license.isActivated) return false;
 }
 
 
-   if (activeTab === "Activated") {
-  if (!license.isActivated) return false;
+   if (activeTab === "Activated" ) {
+
+  if ( !license.isActivated ) return false;
+  if ( license.status === 'Cancelled' ) return false;
 }
 
     if (activeTab === 'Cancelled' && license.status !== 'Cancelled') return false;
