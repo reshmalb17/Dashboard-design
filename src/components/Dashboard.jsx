@@ -739,7 +739,15 @@ if (createdAt) {
       })
       .slice(0, 20);
   }, [sites, subscriptions, licenses]);
+console.log('Recent Domains:', recentDomains);
 
+
+const activeDomains = useMemo(() => {
+  return recentDomains.filter(
+    site => site.status !== "Cancelled" && site.status !== "Expired"
+  );
+}, [recentDomains]);
+console.log('Active Domains:', activeDomains);
   // Filter domains based on search query and billing period
   const filteredDomains = useMemo(() => {
     let filtered = recentDomains;
@@ -770,7 +778,7 @@ if (createdAt) {
     return filtered;
   }, [recentDomains, searchQuery, billingPeriodFilter]);
 
-
+console.log('Filtered Domains before adding license keys:', filteredDomains);
 const updatedFilteredDomains = filteredDomains.map(domain => ({
   ...domain,
   licenseKey: licenseMap.get(domain.subscriptionId) || null,
@@ -1150,7 +1158,7 @@ const updatedFilteredDomains = filteredDomains.map(domain => ({
             className="stat-value"
             style={{ fontSize: "80px", fontWeight: "200" }}
           >
-            {recentDomains.length}
+            {activeDomains.length}
           </div>
           <div className="stat-icons">
             <img src={total} alt="total" />
@@ -1160,11 +1168,11 @@ const updatedFilteredDomains = filteredDomains.map(domain => ({
         <div className="stat-card webflow-card">
           <div className="stat-label">Webflow</div>
           <div className="stat-value">
-            <span>{recentDomains.filter(
+            <span>{activeDomains.filter(
   site => site.platform === "Webflow"
 ).length}</span>
             <span style={{ fontWeight: 400, color: "#5C577D" }}>
-              /{recentDomains.length}
+              /{activeDomains.length}
             </span>
           </div>
           <div className="stat-background-icon webflow-bg">
@@ -1185,11 +1193,11 @@ const updatedFilteredDomains = filteredDomains.map(domain => ({
         <div className="stat-card framer-card">
           <div className="stat-label">Framer</div>
           <div className="stat-value">
-            <span>{recentDomains.filter(
+            <span>{activeDomains.filter(
   site => site.platform === "Framer"
 ).length}</span>
             <span style={{ fontWeight: 400, color: "#5C577D" }}>
-              /{recentDomains.length}
+              /{activeDomains.length}
             </span>
           </div>
           <div className="stat-background-icon framer-bg">
