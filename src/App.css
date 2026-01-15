@@ -868,3 +868,29 @@ gap:2px;
     color: #fff;
      z-index: 999; 
 }
+/* Fullscreen white background */
+.auth-loader {
+  height: 100vh;
+  width: 100vw;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Modern spinning loader */
+.spinner {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 4px solid rgba(82, 166, 249, 0.2);
+  border-top-color: #52a6f9;
+  animation: spin 0.9s linear infinite;
+}
+
+/* Smooth spin animation */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

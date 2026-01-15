@@ -25,6 +25,16 @@ import './App.css';
 function LoginRoute() {
   const { isAuthenticated, userEmail, loading: authLoading } = useMemberstack();
 
+if (authLoading) {
+    return (
+     <div className="auth-loader">
+  <div className="spinner" />
+</div>
+
+    );
+  }
+
+
   // Redirect to dashboard if already authenticated (only after loading completes)
   if (!authLoading && isAuthenticated && userEmail) {
     return <Navigate to="/dashboard" replace />;
@@ -505,7 +515,10 @@ useEffect(() => {
   // This component should only render when authenticated (protected by route)
   // But keep the check as a safety measure
   if (!isAuthenticated || !userEmail) {
-    return null; // Will be redirected by ProtectedRoute
+    return (<div className="auth-loader">
+  <div className="spinner" />
+</div>
+); // Will be redirected by ProtectedRoute
   }
 
   return (
