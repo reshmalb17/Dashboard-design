@@ -813,3 +813,85 @@ export async function getAPISessionToken(userEmail) {
   return null;
 }
 
+export async function sendSignupPasswordlessEmail(email) {
+  try {
+    const memberstack = await waitForSDK();
+
+    if (!memberstack) {
+      return { success: false, error: "Memberstack SDK not available" };
+    }
+
+    // ✅ CORRECT METHOD FOR NEW USERS
+    if (
+      memberstack.sendMemberSignupPasswordlessEmail &&
+      typeof memberstack.sendMemberSignupPasswordlessEmail === "function"
+    ) {
+      const response = await memberstack.sendMemberSignupPasswordlessEmail({
+        email,
+      });
+
+      // MemberStack sometimes returns null/undefined on success
+      if (!response || response?.data) {
+        return { success: true };
+      }
+
+      if (response?.errors?.length) {
+        return {
+          success: false,
+          error: response.errors[0]?.message || "Signup failed",
+        };
+      }
+
+      return { success: true };
+    }
+
+    return {
+      success: false,
+      error: "Passwordless signup not enabled in Memberstack",
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message || "Unknown error",
+    };
+  }
+}
+export async function verifySignupCode(email, code) {
+  try {
+    const memberstack = await waitForSDK();
+    
+    if (!memberstack) {
+      console.error('[Memberstack] SDK not available for verifying code');
+      return { success: false, error: 'SDK not available' };
+    }
+
+    // Method 1: signupMemberPasswordless (correct Memberstack method)
+    if (memberstack.signupMemberPasswordless && typeof memberstack.signupMemberPasswordless === 'function') {
+      try {
+        const response = await memberstack.signupMemberPasswordless({ email, passwordlessToken: code });
+        if (response && response.data) {
+          return { success: true, data: response.data };
+        } else if (response && response.errors) {
+          return { success: false, error: response.errors[0]?.message || 'Invalid code' };
+        }
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error.message || 'Verification failed' };
+      }
+    }
+    
+    // Fallback methods
+    if (memberstack.verifyCode && typeof memberstack.verifyCode === 'function') {
+      try {
+        const result = await memberstack.verifyCode({ email, code });
+        return { success: !!result, data: result };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    }
+    
+    return { success: false, error: 'Verification method not available' };
+  } catch (error) {
+    return { success: false, error: error.message || 'Unknown error' };
+  }
+}

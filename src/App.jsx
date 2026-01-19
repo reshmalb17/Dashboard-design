@@ -20,11 +20,12 @@ import consentLogo from './assets/consent-logo.svg';
 import exportIcon from './assets/export-icon.svg';
 import DashboardSkeleton from './components/DashboardSkeleton';
 import './App.css';
+import MemberstackSignup from './components/MemberstackSignup';
 
 // Login route component - uses existing LoginPrompt, redirects to dashboard if authenticated
 function LoginRoute() {
   const { isAuthenticated, userEmail, loading: authLoading } = useMemberstack();
-
+const [loginScreen, setLoginScreen] = useState(true); // Force re-render on auth state change
 if (authLoading) {
     return (
      <div className="auth-loader">
@@ -43,7 +44,8 @@ if (authLoading) {
   // Show login page using existing LoginPrompt component (even during loading)
   return (
     <div className="login-container">
-      <LoginPrompt />
+   { loginScreen &&  <LoginPrompt setLoginScreen={setLoginScreen} />}
+   {!loginScreen && <MemberstackSignup setLoginScreen={setLoginScreen} /> }
     </div>
   );
 }
@@ -710,6 +712,7 @@ useEffect(() => {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
+     
       <Routes>
         <Route path="/" element={<LoginRoute />} />
         <Route

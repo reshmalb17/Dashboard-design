@@ -9,7 +9,7 @@ import './LoginPrompt.css';
 import consentLogo from '../assets/consent-logo.svg';
 import backgroundLines from '../assets/background-lines.svg';
 
-export default function LoginPrompt() {
+export default function LoginPrompt({ setLoginScreen }) {
   const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState('');
@@ -261,6 +261,21 @@ export default function LoginPrompt() {
               {(
                 <p className="login-inbox-message">Please check your Email Inbox</p>
               )}
+
+              <div style={{ marginTop: '16px', textAlign: 'center' }}>
+  <span style={{ fontSize: '14px' }}>
+    Don’t have an account?{' '}
+    <button
+      type="button"
+      onClick={() => setLoginScreen(false)}
+      className="login-link-button"
+      style={{ padding: 0 }}
+    >
+      Sign up
+    </button>
+  </span>
+</div>
+
             </form>
           </>
         ) : (
