@@ -1363,7 +1363,7 @@ const updatedFilteredDomains = filteredDomains.map(domain => ({
                   <td className="black">{domain.expirationDate}</td>
                   <td className="black">
                     <div className="license-key-cell">
-                      <span>{domain.licenseKey}</span>
+                      <span className="license-key-text">{domain.licenseKey}</span>
                       {domain.licenseKey !== "N/A" && (
                         <button
                           className="copy-icon-btn"

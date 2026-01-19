@@ -230,21 +230,21 @@ border: 1px solid #8B77F94D;
 
 /* License Key Cell */
 .license-key-cell {
-  gap: 8px;
+  gap: 1px;
 }
 
 .license-key-text {
 
   font-size: 14px;
 
+max-width: 212px;
 }
 
 .license-view-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+ 
   border: none;
   background: transparent;
   cursor: pointer;

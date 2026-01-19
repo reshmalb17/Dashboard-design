@@ -56,6 +56,7 @@
   color: #0A091F;
   font-weight: 600;
   border-radius: 10px;
+ background: linear-gradient(280deg, #0061FF -22.99%, #FFFFFF 105.83%);
 }
 
 .sidebar-item.active::before {

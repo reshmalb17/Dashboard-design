@@ -536,7 +536,7 @@ useEffect(() => {
               <img src={exportIcon} alt="Export" className="header-icon-image" />
             </button> */}
 
-           {activeSection === 'licenses' && <button
+           { <button
               className="header-btn header-btn-text"
               onClick={() => setPurchaseModalOpen(true)}
             >
@@ -554,7 +554,7 @@ useEffect(() => {
                   strokeLinecap="round"
                 />
               </svg>
-              <span>Purchase License Key</span>
+              <span>{activeSection === 'licenses' ?'Purchase License Key':"Bulk Purchase"}</span>
             </button>}
 
             {/* Temporarily hidden - Add Domain button */}
