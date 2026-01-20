@@ -281,7 +281,8 @@ border: 1px solid #8B77F94D
 }
 
 .recent-domains-table thead {
-  background: #F2F7FF;
+    background: #F2F7FF;
+    border-bottom: 1px solid #9FBCE4;
 }
 
 .recent-domains-table th {
@@ -294,7 +295,7 @@ border: 1px solid #8B77F94D
 }
 
 .recent-domains-table td {
-  padding: 12px 16px;
+  padding: 20px;
   font-size: 14px;
   color: #524693;
   border-bottom: 1px solid #9FBCE4;
