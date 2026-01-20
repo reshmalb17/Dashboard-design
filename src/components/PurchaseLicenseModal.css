@@ -155,7 +155,7 @@ box-shadow: 0px 24px 33px 0px #262E8433;
 }
 
 .quantity-max-message {
-  margin: 12px 0 0 0;
+  margin: 12px 0 20px 0;
   font-size: 13px;
   color: #262E84;
   font-weight: 400;
@@ -205,7 +205,7 @@ box-shadow: 0px 24px 33px 0px #262E8433;
 /* Billing Options */
 .purchase-billing-options {
   display: flex;
-  
+  margin-top: 31px;
   gap: 37px;
 }
 

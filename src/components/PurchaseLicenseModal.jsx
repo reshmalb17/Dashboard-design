@@ -152,7 +152,11 @@ export default function PurchaseLicenseModal({ isOpen, onClose }) {
             <label className="purchase-label">Quantity of license key</label>
             <div className="quantity-controls">
               <button className="quantity-btn quantity-btn-decrease" onClick={handleDecrease}>
-                -
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M8 12H16" stroke="#120F27" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M9 22H15C20 22 22 20 22 15V9C22 4 20 2 15 2H9C4 2 2 4 2 9V15C2 20 4 22 9 22Z" stroke="#120F27" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+
               </button>
               <input
                 type="number"
@@ -163,7 +167,12 @@ export default function PurchaseLicenseModal({ isOpen, onClose }) {
                 max="25"
               />
               <button className="quantity-btn quantity-btn-increase" onClick={handleIncrease}>
-                +
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M8 12H16" stroke="#120F27" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M12 16V8" stroke="#120F27" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M9 22H15C20 22 22 20 22 15V9C22 4 20 2 15 2H9C4 2 2 4 2 9V15C2 20 4 22 9 22Z" stroke="#120F27" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+
               </button>
             </div>
 
@@ -201,7 +210,7 @@ export default function PurchaseLicenseModal({ isOpen, onClose }) {
                   checked={billingCycle === 'Monthly'}
                   onChange={(e) => setBillingCycle(e.target.value)}
                 />
-                <span className="billing-option-label">Monthly</span>
+                <span className="billing-option-label" style={{fontWeight:"200"}}>Monthly</span>
               </label>
             </div>
           </div>

@@ -2,7 +2,7 @@
 
   display: flex;
   flex-direction: column;
-  gap: 54px;
+  gap:47px;
 }
 
 /* Summary Statistics */
@@ -297,7 +297,7 @@ border: 1px solid #8B77F94D
   padding: 12px 16px;
   font-size: 14px;
   color: #524693;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid #9FBCE4;
 }
 
 .recent-domains-table tbody tr:hover {

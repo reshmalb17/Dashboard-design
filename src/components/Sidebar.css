@@ -7,7 +7,7 @@
   max-height: 100%;
   position: fixed;
   left: 0;
-  top: 120px;
+  top: 123px;
   display: flex;
   flex-direction: column;
  
@@ -48,7 +48,7 @@
 
 .sidebar-item:hover {
   background: #f3f4f6;
-  color: #262E84;
+
 }
 
 .sidebar-item.active {

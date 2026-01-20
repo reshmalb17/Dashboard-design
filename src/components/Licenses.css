@@ -50,7 +50,7 @@
 .licenses-search-wrapper.expanded .licenses-search-input {
   width: 300px;
   opacity: 1;
-  padding: 11px 16px;
+  padding: 10.8px 16px;
 }
 
 .licenses-search-input:focus {
@@ -197,7 +197,7 @@ border: 1px solid #8B77F94D;
 }
 
 .licenses-table tbody tr {
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #9FBCE4;
   transition: background-color 0.2s;
 }
 
@@ -217,7 +217,7 @@ border: 1px solid #8B77F94D;
 .licenses-table td {
   padding: 16px;
   font-size: 14px;
-  color: #333;
+  color: #0A091F;
   vertical-align: middle;
 }
 
